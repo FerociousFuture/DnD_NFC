@@ -7,6 +7,7 @@ import android.nfc.Tag
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler // <--- IMPORTANTE: Importar esto
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import com.example.dnd_nfc.data.model.CharacterSheet
@@ -25,7 +26,7 @@ class MainActivity : ComponentActivity() {
     private var pendingWriteData: String? = null
     private lateinit var googleAuthClient: GoogleAuthClient
 
-    // SOLUCIÓN: Movemos el estado aquí arriba para que 'onNewIntent' pueda verlo
+    // Estado del personaje escaneado fuera del setContent para que onNewIntent lo vea
     private val _scannedCharacter = mutableStateOf<CharacterSheet?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,40 +34,57 @@ class MainActivity : ComponentActivity() {
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         googleAuthClient = GoogleAuthClient(this)
 
+        // Determinamos la pantalla inicial
         val startDestination = if (Firebase.auth.currentUser != null) "read" else "auth"
 
         setContent {
             DnD_NFCTheme {
+                // Estado de la navegación
                 var currentScreen by remember { mutableStateOf(startDestination) }
 
-                // Observamos la variable de clase aquí
+                // Observamos el personaje escaneado
                 val characterState by _scannedCharacter
 
                 when (currentScreen) {
-                    "auth" -> AuthScreen(
-                        onLoginSuccess = { currentScreen = "read" }
-                    )
-                    "read" -> NfcReadScreen(
-                        character = characterState, // Usamos el estado observado
-                        isWaiting = true,
-                        onCreateClick = { currentScreen = "write" },
-                        onSignOutClick = {
-                            googleAuthClient.signOut()
-                            currentScreen = "auth"
-                            _scannedCharacter.value = null // Limpiamos al salir
-                            Toast.makeText(applicationContext, "Sesión cerrada", Toast.LENGTH_SHORT).show()
-                        },
-                        // NUEVO: Función para resetear y leer otro
-                        onScanAgainClick = {
-                            _scannedCharacter.value = null
+                    "auth" -> {
+                        AuthScreen(
+                            onLoginSuccess = { currentScreen = "read" }
+                        )
+                    }
+                    "read" -> {
+                        // Si estás en el Home y das Atrás, sale de la app (comportamiento normal)
+                        NfcReadScreen(
+                            character = characterState,
+                            isWaiting = true,
+                            onCreateClick = { currentScreen = "write" },
+                            onSignOutClick = {
+                                googleAuthClient.signOut()
+                                currentScreen = "auth"
+                                _scannedCharacter.value = null
+                                Toast.makeText(applicationContext, "Sesión cerrada", Toast.LENGTH_SHORT).show()
+                            },
+                            onScanAgainClick = {
+                                _scannedCharacter.value = null
+                            }
+                        )
+                    }
+                    "write" -> {
+                        // --- AQUÍ ESTÁ LA MAGIA ---
+                        // Interceptamos el botón "Atrás" físico del celular
+                        BackHandler(enabled = true) {
+                            // En lugar de cerrar la app, volvemos al lector
+                            currentScreen = "read"
+                            // Opcional: Cancelamos cualquier escritura pendiente
+                            pendingWriteData = null
                         }
-                    )
-                    "write" -> NfcWriteScreen(
-                        onReadyToWrite = { csvData ->
-                            pendingWriteData = csvData
-                            Toast.makeText(this, "Acerca una etiqueta NFC para grabar", Toast.LENGTH_LONG).show()
-                        }
-                    )
+
+                        NfcWriteScreen(
+                            onReadyToWrite = { csvData ->
+                                pendingWriteData = csvData
+                                Toast.makeText(this, "Acerca una etiqueta NFC para grabar", Toast.LENGTH_LONG).show()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -97,23 +115,24 @@ class MainActivity : ComponentActivity() {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
             if (pendingWriteData != null && tag != null) {
-                // Modo Escritura
+                // MODO ESCRITURA
                 val success = NfcManager.writeToTag(tag, pendingWriteData!!)
                 if (success) {
-                    Toast.makeText(this, "¡Personaje grabado!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "¡Personaje grabado correctamente!", Toast.LENGTH_LONG).show()
                     pendingWriteData = null
+                    // Opcional: Podrías limpiar el formulario o volver a leer aquí
                 } else {
-                    Toast.makeText(this, "Error al escribir", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Error al escribir en la etiqueta", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // Modo Lectura
+                // MODO LECTURA
                 val character = NfcManager.readFromIntent(intent)
                 if (character != null) {
-                    // SOLUCIÓN: Ahora sí actualizamos la variable que la UI está observando
                     _scannedCharacter.value = character
                     Toast.makeText(this, "Leído: ${character.n}", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "Error al leer o formato inválido", Toast.LENGTH_SHORT).show()
+                    // Si lee algo pero no es un personaje válido
+                    Toast.makeText(this, "Etiqueta leída, pero no contiene un personaje válido", Toast.LENGTH_SHORT).show()
                 }
             }
         }
