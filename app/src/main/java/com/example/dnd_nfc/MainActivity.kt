@@ -1,47 +1,53 @@
 package com.example.dnd_nfc
 
+import android.app.PendingIntent
+import android.content.Intent
+import android.nfc.NfcAdapter
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.*
+import com.example.dnd_nfc.nfc.NfcManager
+import com.example.dnd_nfc.ui.screens.NfcReadScreen
 import com.example.dnd_nfc.ui.theme.DnD_NFCTheme
 
+
 class MainActivity : ComponentActivity() {
+    private var nfcAdapter: NfcAdapter? = null
+    private var scannedContent by mutableStateOf("")
+    private var isWaitingByNfc by mutableStateOf(true)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+
         setContent {
             DnD_NFCTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                NfcReadScreen(
+                    scannedData = scannedContent,
+                    isWaiting = isWaitingByNfc
+                )
             }
         }
     }
-}
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
+    override fun onResume() {
+        super.onResume()
+        val intent = Intent(this, javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_MUTABLE)
+        nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
+    }
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    DnD_NFCTheme {
-        Greeting("Android")
+    override fun onPause() {
+        super.onPause()
+        nfcAdapter?.disableForegroundDispatch(this)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
+            scannedContent = NfcManager.readFromIntent(intent)
+            isWaitingByNfc = false
+        }
     }
 }
