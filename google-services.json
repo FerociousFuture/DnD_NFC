@@ -12,7 +12,20 @@
           "package_name": "com.example.dnd_nfc"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "485986063620-67a9p1f4g4ogvpg6o60odo3rochbrsiu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.dnd_nfc",
+            "certificate_hash": "f3efed54c2a58df830317d7ec95588377de1c4f0"
+          }
+        },
+        {
+          "client_id": "485986063620-n44o0n09qj7tdopeedi3lf27a6r4qqdp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDF2Z-NV3HVx--2V5XIY89eAqZmEyG4Doc"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "485986063620-jnddhn8r04ipupcttremn64u32jdql94.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

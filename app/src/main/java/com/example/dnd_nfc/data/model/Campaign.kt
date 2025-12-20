@@ -1,21 +1,27 @@
 package com.example.dnd_nfc.data.model
 
-import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.PropertyName
 
-// Modelo para la Campaña
-@IgnoreExtraProperties
+/**
+ * Modelo de la campaña.
+ * @param id ID único de Firebase.
+ * @param name Nombre de la partida (ej: "La Mina Perdida").
+ * @param joinCode Código de 6 dígitos para que los jugadores se unan.
+ * @param dmId ID del usuario que creó la partida (el Dungeon Master).
+ * @param logs Lista de eventos (ej: "Grog entró a la partida").
+ */
 data class Campaign(
     val id: String = "",
     val name: String = "",
-    val adminId: String = "", // El DM que creó la campaña
-    val joinCode: String = "", // Código de 6 dígitos para unirse
-    val logs: List<GameLog> = emptyList(),
-    val notes: String = "" // Notas generales de la campaña
+    val joinCode: String = "",
+    val dmId: String = "",
+    val logs: List<GameLog> = emptyList()
 )
 
-// Modelo para los Logs de personajes
+/**
+ * Un evento individual en la bitácora.
+ */
 data class GameLog(
-    val characterName: String = "",
-    val message: String = "", // Ej: "Recibió 10 de daño", "Subió a nivel 5"
+    val message: String = "",
     val timestamp: Long = System.currentTimeMillis()
 )

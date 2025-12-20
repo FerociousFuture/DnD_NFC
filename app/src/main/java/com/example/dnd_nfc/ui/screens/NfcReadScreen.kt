@@ -11,7 +11,8 @@ import com.example.dnd_nfc.data.model.CharacterSheet
 @Composable
 fun NfcReadScreen(
     character: CharacterSheet?,
-    isWaiting: Boolean
+    isWaiting: Boolean,
+    onCreateClick: () -> Unit // <--- Este es el parámetro nuevo que faltaba
 ) {
     Column(
         modifier = Modifier
@@ -31,6 +32,14 @@ fun NfcReadScreen(
             CircularProgressIndicator(modifier = Modifier.size(64.dp))
             Spacer(modifier = Modifier.height(24.dp))
             Text("Acerca la miniatura al teléfono...")
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Botón para ir a la pantalla de crear personaje
+            Button(onClick = onCreateClick) {
+                Text("Grabar Nuevo Personaje (Modo DM)")
+            }
+
         } else if (character != null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -47,7 +56,6 @@ fun NfcReadScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Atributos Principales:", style = MaterialTheme.typography.titleSmall)
 
-                    // Separamos los valores (ej: "18-14-12-10-8-15")
                     val stats = character.s.split("-")
                     val labels = listOf(
                         "Fuerza (FUE)",
@@ -72,6 +80,12 @@ fun NfcReadScreen(
                         Text("Estadísticas: ${character.s}")
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(onClick = onCreateClick) {
+                Text("Grabar Otro Personaje")
             }
         }
     }

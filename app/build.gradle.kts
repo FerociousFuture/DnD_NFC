@@ -66,4 +66,13 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
 
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+
+    // Iconos extendidos para la UI (opcional, para botones bonitos)
+    implementation("androidx.compose.material:material-icons-extended:1.6.0")
+
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
 }

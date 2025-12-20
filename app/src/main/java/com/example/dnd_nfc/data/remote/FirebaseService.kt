@@ -2,42 +2,76 @@ package com.example.dnd_nfc.data.remote
 
 import com.example.dnd_nfc.data.model.Campaign
 import com.example.dnd_nfc.data.model.GameLog
-import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 
-class FirebaseService {
-    private val db = FirebaseFirestore.getInstance()
-    private val campaignCollection = db.collection("campaigns")
+object FirebaseService {
+    private val db = Firebase.firestore
+    private val auth = Firebase.auth
 
-    // Crear campaña con código único
-    suspend fun createCampaign(name: String, adminId: String): String {
-        val joinCode = (100000..999999).random().toString()
-        val id = campaignCollection.document().id
-        val newCampaign = Campaign(id, name, adminId, joinCode)
+    // Referencia a la colección
+    private val campaignsRef = db.collection("campaigns")
 
-        campaignCollection.document(id).set(newCampaign).await()
-        return joinCode
+    /**
+     * Crea una nueva campaña y devuelve el código de unión.
+     */
+    suspend fun createCampaign(campaignName: String): String? {
+        val user = auth.currentUser ?: return null
+
+        // Generamos un código de 6 dígitos aleatorio
+        val code = (100000..999999).random().toString()
+        val id = campaignsRef.document().id
+
+        val newCampaign = Campaign(
+            id = id,
+            name = campaignName,
+            joinCode = code,
+            dmId = user.uid,
+            logs = listOf(GameLog("Campaña iniciada: $campaignName"))
+        )
+
+        campaignsRef.document(id).set(newCampaign).await()
+        return code
     }
 
-    // Unirse a campaña mediante código
-    suspend fun joinCampaignByCode(code: String): Campaign? {
-        val query = campaignCollection.whereEqualTo("joinCode", code).get().await()
-        return query.documents.firstOrNull()?.toObject(Campaign::class.java)
+    /**
+     * Busca una campaña por su código (para unirse).
+     */
+    suspend fun getCampaignByCode(code: String): Campaign? {
+        val snapshot = campaignsRef
+            .whereEqualTo("joinCode", code)
+            .limit(1) // Importante para ahorrar: solo traemos 1
+            .get()
+            .await()
+
+        return if (!snapshot.isEmpty) {
+            snapshot.documents[0].toObject(Campaign::class.java)
+        } else {
+            null
+        }
     }
 
-    // Añadir un log de personaje (Ej: al leer el NFC)
-    suspend fun addLog(campaignId: String, characterName: String, action: String) {
-        val docRef = campaignCollection.document(campaignId)
-        db.runTransaction { transaction ->
-            val snapshot = transaction.get(docRef)
-            val campaign = snapshot.toObject(Campaign::class.java)
-            val updatedLogs = campaign?.logs?.toMutableList() ?: mutableListOf()
-            updatedLogs.add(GameLog(characterName, action))
+    /**
+     * Agrega un log a la campaña (Ej: cuando escaneas un NFC).
+     * Usamos 'arrayUnion' para añadirlo a la lista existente sin borrar lo anterior.
+     */
+    suspend fun addLogToCampaign(campaignId: String, message: String) {
+        val newLog = GameLog(message = message)
 
-            // Limitamos a los últimos 50 logs para no inflar el documento (Ahorro de espacio/dinero)
-            val finalLogs = if (updatedLogs.size > 50) updatedLogs.takeLast(50) else updatedLogs
+        campaignsRef.document(campaignId)
+            .update("logs", FieldValue.arrayUnion(newLog))
+            .await()
+    }
 
-            transaction.update(docRef, "logs", finalLogs)
-        }.await()
+    /**
+     * Login anónimo rápido para que el usuario no pierda tiempo registrándose
+     */
+    suspend fun signInAnonymously() {
+        if (auth.currentUser == null) {
+            auth.signInAnonymously().await()
+        }
     }
 }
