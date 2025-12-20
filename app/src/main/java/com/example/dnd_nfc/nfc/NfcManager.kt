@@ -7,37 +7,38 @@ import com.example.dnd_nfc.data.model.CharacterSheet
 
 object NfcManager {
     /**
-     * Lee el Intent NFC y procesa el formato CSV: "Nombre,Clase,Raza,Stats"
+     * Lee el Intent NFC y procesa el formato CSV compacto para ahorrar espacio:
+     * "Nombre,Clase,Raza,FUE,DES,CON,INT,SAB,CAR"
      */
     fun readFromIntent(intent: Intent): CharacterSheet? {
         val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
         if (rawMessages != null && rawMessages.isNotEmpty()) {
             val msg = rawMessages[0] as NdefMessage
 
-            // Obtenemos el payload completo
-            val payload = msg.records[0].payload
+            // Extraemos el payload manejando el estándar NDEF (metadatos de idioma)
+            val payloadBytes = msg.records[0].payload
+            val isUtf8 = (payloadBytes[0].toInt() and 0x80) == 0
+            val langCodeLength = payloadBytes[0].toInt() and 0x3F
+            val textEncoding = if (isUtf8) "UTF-8" else "UTF-16"
 
-            // El estándar NDEF suele incluir el código de idioma al principio (ej: "en")
-            // Saltamos el primer byte (status) y el código de idioma
-            val languageCodeLength = payload[0].toInt() and 0x3F
-            val textEncoding = if ((payload[0].toInt() and 0x80) == 0) "UTF-8" else "UTF-16"
-
-            val content = String(
-                payload,
-                languageCodeLength + 1,
-                payload.size - languageCodeLength - 1,
+            val payload = String(
+                payloadBytes,
+                langCodeLength + 1,
+                payloadBytes.size - langCodeLength - 1,
                 charset(textEncoding)
             )
 
             // Dividimos por coma para el formato CSV
-            val parts = content.split(",")
+            val parts = payload.split(",")
 
-            if (parts.size >= 4) {
+            // Verificamos que existan al menos los 3 campos base + 6 estadísticas = 9 campos
+            if (parts.size >= 9) {
                 return CharacterSheet(
                     n = parts[0].trim(),
                     c = parts[1].trim(),
                     r = parts[2].trim(),
-                    s = parts[3].trim()
+                    // Unimos las estadísticas con guiones para el almacenamiento interno en el modelo
+                    s = parts.subList(3, 9).joinToString("-") { it.trim() }
                 )
             }
         }

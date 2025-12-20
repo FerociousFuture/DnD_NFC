@@ -38,11 +38,39 @@ fun NfcReadScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Personaje detectado:", style = MaterialTheme.typography.titleMedium)
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
                     Text("Nombre: ${character.n}")
                     Text("Clase: ${character.c}")
                     Text("Raza: ${character.r}")
-                    Text("Estadísticas: ${character.s}")
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Atributos Principales:", style = MaterialTheme.typography.titleSmall)
+
+                    // Separamos los valores (ej: "18-14-12-10-8-15")
+                    val stats = character.s.split("-")
+                    val labels = listOf(
+                        "Fuerza (FUE)",
+                        "Destreza (DES)",
+                        "Constitución (CON)",
+                        "Inteligencia (INT)",
+                        "Sabiduría (SAB)",
+                        "Carisma (CAR)"
+                    )
+
+                    if (stats.size == 6) {
+                        stats.forEachIndexed { index, value ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = labels[index], style = MaterialTheme.typography.bodyMedium)
+                                Text(text = value, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    } else {
+                        Text("Estadísticas: ${character.s}")
+                    }
                 }
             }
         }
