@@ -3,6 +3,7 @@ package com.example.dnd_nfc.data.remote
 import android.content.Context
 import android.util.Log
 import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential // <--- ESTE ERA EL IMPORT QUE FALTABA
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -16,8 +17,8 @@ class GoogleAuthClient(private val context: Context) {
     private val auth = Firebase.auth
     private val credentialManager = CredentialManager.create(context)
 
-    // REEMPLAZA ESTO CON TU WEB CLIENT ID COPIADO DE FIREBASE CONSOLE
-    private val WEB_CLIENT_ID = "TU_WEB_CLIENT_ID_AQUI.apps.googleusercontent.com"
+    // YA PUESTO EL ID CORRECTO (Client Type 3)
+    private val WEB_CLIENT_ID = "485986063620-n44o0n09qj7tdopeedi3lf27a6r4qqdp.apps.googleusercontent.com"
 
     suspend fun signIn(): Boolean {
         try {
@@ -25,7 +26,7 @@ class GoogleAuthClient(private val context: Context) {
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(false)
                 .setServerClientId(WEB_CLIENT_ID)
-                .setAutoSelectEnabled(true) // Autologin si ya dio permiso antes
+                .setAutoSelectEnabled(true)
                 .build()
 
             val request = GetCredentialRequest.Builder()
@@ -40,6 +41,7 @@ class GoogleAuthClient(private val context: Context) {
 
             // 3. Extraemos el token del resultado
             val credential = result.credential
+            // Ahora 'CustomCredential' ya funcionará porque está importado arriba
             if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
 
