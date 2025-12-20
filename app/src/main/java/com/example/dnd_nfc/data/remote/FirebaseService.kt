@@ -1,77 +1,98 @@
 package com.example.dnd_nfc.data.remote
 
-import com.example.dnd_nfc.data.model.Campaign
-import com.example.dnd_nfc.data.model.GameLog
+import android.util.Log
+import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.google.firebase.auth.ktx.auth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Singleton que maneja todas las operaciones con la base de datos Firestore.
+ */
 object FirebaseService {
-    private val db = Firebase.firestore
-    private val auth = Firebase.auth
 
-    // Referencia a la colección
+    private val auth = Firebase.auth
+    private val db = Firebase.firestore
+
+    // Referencia a la colección de personajes
+    private val charactersRef = db.collection("characters")
+
+    // Referencia a la colección de campañas (por si se usa a futuro)
     private val campaignsRef = db.collection("campaigns")
 
+    // --- GESTIÓN DE PERSONAJES (Fichas Completas) ---
+
     /**
-     * Crea una nueva campaña y devuelve el código de unión.
+     * Guarda o actualiza un personaje en la nube.
+     * Si el personaje no tiene ID, se crea uno nuevo.
+     * Se asigna automáticamente al usuario logueado.
      */
-    suspend fun createCampaign(campaignName: String): String? {
-        val user = auth.currentUser ?: return null
+    suspend fun saveCharacter(character: PlayerCharacter): Boolean {
+        val user = auth.currentUser ?: return false
 
-        // Generamos un código de 6 dígitos aleatorio
-        val code = (100000..999999).random().toString()
-        val id = campaignsRef.document().id
+        try {
+            // Si es nuevo (ID vacío), generamos un ID de documento
+            val docId = if (character.id.isEmpty()) charactersRef.document().id else character.id
 
-        val newCampaign = Campaign(
-            id = id,
-            name = campaignName,
-            joinCode = code,
-            dmId = user.uid,
-            logs = listOf(GameLog("Campaña iniciada: $campaignName"))
-        )
+            // Aseguramos que el personaje tenga el ID del documento y el ID del usuario dueño
+            val charToSave = character.copy(
+                id = docId,
+                userId = user.uid
+            )
 
-        campaignsRef.document(id).set(newCampaign).await()
-        return code
+            // Guardamos en Firestore (set reemplaza o crea)
+            charactersRef.document(docId).set(charToSave).await()
+            return true
+        } catch (e: Exception) {
+            Log.e("FirebaseService", "Error al guardar personaje: ${e.message}")
+            return false
+        }
     }
 
     /**
-     * Busca una campaña por su código (para unirse).
+     * Obtiene la lista de todos los personajes creados por el usuario actual.
      */
-    suspend fun getCampaignByCode(code: String): Campaign? {
-        val snapshot = campaignsRef
-            .whereEqualTo("joinCode", code)
-            .limit(1) // Importante para ahorrar: solo traemos 1
-            .get()
-            .await()
+    suspend fun getUserCharacters(): List<PlayerCharacter> {
+        val user = auth.currentUser ?: return emptyList()
 
-        return if (!snapshot.isEmpty) {
-            snapshot.documents[0].toObject(Campaign::class.java)
-        } else {
+        return try {
+            val snapshot = charactersRef
+                .whereEqualTo("userId", user.uid)
+                .get()
+                .await()
+
+            // Convertimos los documentos a objetos PlayerCharacter
+            snapshot.toObjects(PlayerCharacter::class.java)
+        } catch (e: Exception) {
+            Log.e("FirebaseService", "Error al obtener personajes: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Obtiene un personaje específico por su ID.
+     */
+    suspend fun getCharacterById(charId: String): PlayerCharacter? {
+        return try {
+            val doc = charactersRef.document(charId).get().await()
+            doc.toObject(PlayerCharacter::class.java)
+        } catch (e: Exception) {
+            Log.e("FirebaseService", "Error al obtener personaje $charId: ${e.message}")
             null
         }
     }
 
     /**
-     * Agrega un log a la campaña (Ej: cuando escaneas un NFC).
-     * Usamos 'arrayUnion' para añadirlo a la lista existente sin borrar lo anterior.
+     * Elimina un personaje permanentemente.
      */
-    suspend fun addLogToCampaign(campaignId: String, message: String) {
-        val newLog = GameLog(message = message)
-
-        campaignsRef.document(campaignId)
-            .update("logs", FieldValue.arrayUnion(newLog))
-            .await()
-    }
-
-    /**
-     * Login anónimo rápido para que el usuario no pierda tiempo registrándose
-     */
-    suspend fun signInAnonymously() {
-        if (auth.currentUser == null) {
-            auth.signInAnonymously().await()
+    suspend fun deleteCharacter(charId: String): Boolean {
+        return try {
+            charactersRef.document(charId).delete().await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirebaseService", "Error al borrar personaje: ${e.message}")
+            false
         }
     }
 }

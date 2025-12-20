@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.MenuBook // Icono de Libro
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,15 +24,21 @@ fun NfcReadScreen(
     character: CharacterSheet?,
     isWaiting: Boolean,
     onCreateClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onLibraryClick: () -> Unit, // <--- NUEVO PARÁMETRO
     onSignOutClick: () -> Unit,
-    onScanAgainClick: () -> Unit,
-    onEditClick: () -> Unit // <--- NUEVO: Callback para editar
+    onScanAgainClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Lector Arcano", color = MaterialTheme.colorScheme.onBackground) },
+                title = { Text("Lector Arcano") },
                 actions = {
+                    // BOTÓN BIBLIOTECA (Nuevo)
+                    IconButton(onClick = onLibraryClick) {
+                        Icon(Icons.Default.MenuBook, contentDescription = "Biblioteca", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    // BOTÓN SALIR
                     IconButton(onClick = onSignOutClick) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Salir", tint = MaterialTheme.colorScheme.error)
                     }
@@ -40,6 +47,7 @@ fun NfcReadScreen(
             )
         }
     ) { paddingValues ->
+        // ... (El resto del contenido dentro de Box sigue igual que antes) ...
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -48,9 +56,8 @@ fun NfcReadScreen(
             contentAlignment = Alignment.Center
         ) {
             if (character == null) {
-                // ESTADO: ESPERANDO LECTURA
+                // MODO ESPERA
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // Si no tienes un icono custom, usa uno de sistema o texto
                     Icon(
                         painter = painterResource(id = android.R.drawable.ic_menu_search),
                         contentDescription = null,
@@ -58,28 +65,30 @@ fun NfcReadScreen(
                         tint = MaterialTheme.colorScheme.secondary
                     )
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        "Acerca una miniatura...",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    if (isWaiting) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
-                    }
-                    Spacer(modifier = Modifier.height(48.dp))
+                    Text("Acerca una miniatura...", style = MaterialTheme.typography.headlineSmall)
+                    Spacer(modifier = Modifier.height(32.dp))
 
-                    OutlinedButton(onClick = onCreateClick) {
-                        Text("O graba una nueva")
+                    // Botón principal grande para crear NFC
+                    Button(onClick = onCreateClick) {
+                        Text("Grabar Nueva en NFC")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Botón secundario para ir a la biblioteca sin NFC
+                    OutlinedButton(onClick = onLibraryClick) {
+                        Icon(Icons.Default.MenuBook, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Ver Mis Fichas Guardadas")
                     }
                 }
             } else {
-                // ESTADO: FICHA DE PERSONAJE MOSTRADA
+                // MODO FICHA LEÍDA
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Encabezado
+                    // Tarjeta de Cabecera
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         modifier = Modifier.fillMaxWidth()
@@ -90,9 +99,8 @@ fun NfcReadScreen(
                         }
                     }
 
-                    // Estadísticas en Grid
-                    Text("Atributos", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-
+                    // Stats Grid
+                    Text("Atributos", style = MaterialTheme.typography.titleMedium)
                     val stats = character.s.split("-")
                     val labels = listOf("FUE", "DES", "CON", "INT", "SAB", "CAR")
 
@@ -111,7 +119,7 @@ fun NfcReadScreen(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // Botones inferiores
+                    // Botones de Acción
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Button(
                             onClick = onScanAgainClick,
@@ -120,13 +128,11 @@ fun NfcReadScreen(
                         ) {
                             Text("Leer Otro", color = MaterialTheme.colorScheme.onTertiaryContainer)
                         }
-
-                        // BOTÓN MODIFICAR
                         Button(
                             onClick = onEditClick,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Modificar")
+                            Text("Modificar NFC")
                         }
                     }
                 }
