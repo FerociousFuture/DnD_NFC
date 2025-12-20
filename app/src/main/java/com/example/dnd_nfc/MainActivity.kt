@@ -10,7 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import com.example.dnd_nfc.data.model.CharacterSheet
-import com.example.dnd_nfc.data.remote.GoogleAuthClient // Asegúrate de importar esto
+import com.example.dnd_nfc.data.remote.GoogleAuthClient
 import com.example.dnd_nfc.nfc.NfcManager
 import com.example.dnd_nfc.ui.screens.AuthScreen
 import com.example.dnd_nfc.ui.screens.NfcReadScreen
@@ -23,40 +23,42 @@ class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
     private var pendingWriteData: String? = null
-
-    // Instancia del cliente de autenticación
     private lateinit var googleAuthClient: GoogleAuthClient
+
+    // SOLUCIÓN: Movemos el estado aquí arriba para que 'onNewIntent' pueda verlo
+    private val _scannedCharacter = mutableStateOf<CharacterSheet?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
-
-        // Inicializamos el cliente
         googleAuthClient = GoogleAuthClient(this)
 
-        // LÓGICA DE PERSISTENCIA:
-        // Si currentUser NO es null, el usuario sigue logueado y va directo a "read"
         val startDestination = if (Firebase.auth.currentUser != null) "read" else "auth"
 
         setContent {
             DnD_NFCTheme {
                 var currentScreen by remember { mutableStateOf(startDestination) }
-                var scannedCharacter by remember { mutableStateOf<CharacterSheet?>(null) }
+
+                // Observamos la variable de clase aquí
+                val characterState by _scannedCharacter
 
                 when (currentScreen) {
                     "auth" -> AuthScreen(
                         onLoginSuccess = { currentScreen = "read" }
                     )
                     "read" -> NfcReadScreen(
-                        character = scannedCharacter,
+                        character = characterState, // Usamos el estado observado
                         isWaiting = true,
                         onCreateClick = { currentScreen = "write" },
                         onSignOutClick = {
-                            // CERRAR SESIÓN
                             googleAuthClient.signOut()
                             currentScreen = "auth"
-                            scannedCharacter = null // Limpiamos datos viejos
+                            _scannedCharacter.value = null // Limpiamos al salir
                             Toast.makeText(applicationContext, "Sesión cerrada", Toast.LENGTH_SHORT).show()
+                        },
+                        // NUEVO: Función para resetear y leer otro
+                        onScanAgainClick = {
+                            _scannedCharacter.value = null
                         }
                     )
                     "write" -> NfcWriteScreen(
@@ -95,7 +97,7 @@ class MainActivity : ComponentActivity() {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
             if (pendingWriteData != null && tag != null) {
-                // Escritura
+                // Modo Escritura
                 val success = NfcManager.writeToTag(tag, pendingWriteData!!)
                 if (success) {
                     Toast.makeText(this, "¡Personaje grabado!", Toast.LENGTH_LONG).show()
@@ -104,16 +106,14 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "Error al escribir", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // Lectura
+                // Modo Lectura
                 val character = NfcManager.readFromIntent(intent)
                 if (character != null) {
-                    // Aquí es donde en un futuro usaremos ViewModel, por ahora mostramos Toast
+                    // SOLUCIÓN: Ahora sí actualizamos la variable que la UI está observando
+                    _scannedCharacter.value = character
                     Toast.makeText(this, "Leído: ${character.n}", Toast.LENGTH_SHORT).show()
-
-                    // TRUCO TEMPORAL: Forzamos recomposición (en una app real usa ViewModel)
-                    // Como estamos dentro de onNewIntent, no tenemos acceso directo fácil a 'scannedCharacter' del setContent
-                    // Por ahora, solo verás el Toast.
-                    // Para ver la tarjeta en pantalla necesitaríamos mover 'scannedCharacter' a un ViewModel o variable global.
+                } else {
+                    Toast.makeText(this, "Error al leer o formato inválido", Toast.LENGTH_SHORT).show()
                 }
             }
         }

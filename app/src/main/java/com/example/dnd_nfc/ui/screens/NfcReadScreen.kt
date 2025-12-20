@@ -1,9 +1,6 @@
 package com.example.dnd_nfc.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,48 +13,41 @@ fun NfcReadScreen(
     character: CharacterSheet?,
     isWaiting: Boolean,
     onCreateClick: () -> Unit,
-    onSignOutClick: () -> Unit // <--- Nuevo parámetro para cerrar sesión
+    onSignOutClick: () -> Unit,
+    onScanAgainClick: () -> Unit // <--- Nuevo parámetro
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Botón de Cerrar Sesión (Esquina superior derecha)
         Button(
             onClick = onSignOutClick,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer
+            ),
+            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
         ) {
             Text("Salir")
         }
 
-        // Contenido Principal (Centrado)
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = "D&D Mini Reader",
-                style = MaterialTheme.typography.headlineLarge
-            )
-
+            Text("D&D Mini Reader", style = MaterialTheme.typography.headlineLarge)
             Spacer(modifier = Modifier.height(40.dp))
 
-            if (isWaiting && character == null) {
+            if (character == null) {
+                // ESTADO: ESPERANDO LECTURA
                 CircularProgressIndicator(modifier = Modifier.size(64.dp))
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Acerca la miniatura al teléfono...")
-
                 Spacer(modifier = Modifier.height(32.dp))
-
                 Button(onClick = onCreateClick) {
                     Text("Grabar Nuevo Personaje")
                 }
-
-            } else if (character != null) {
+            } else {
+                // ESTADO: PERSONAJE LEÍDO
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -71,13 +61,10 @@ fun NfcReadScreen(
                         Text("Raza: ${character.r}")
 
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Atributos Principales:", style = MaterialTheme.typography.titleSmall)
+                        Text("Atributos:", style = MaterialTheme.typography.titleSmall)
 
                         val stats = character.s.split("-")
-                        val labels = listOf(
-                            "Fuerza", "Destreza", "Constitución",
-                            "Inteligencia", "Sabiduría", "Carisma"
-                        )
+                        val labels = listOf("FUE", "DES", "CON", "INT", "SAB", "CAR")
 
                         if (stats.size == 6) {
                             stats.forEachIndexed { index, value ->
@@ -85,8 +72,8 @@ fun NfcReadScreen(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(text = labels[index], style = MaterialTheme.typography.bodyMedium)
-                                    Text(text = value, style = MaterialTheme.typography.bodyLarge)
+                                    Text(labels[index], style = MaterialTheme.typography.bodyMedium)
+                                    Text(value, style = MaterialTheme.typography.bodyLarge)
                                 }
                             }
                         } else {
@@ -97,8 +84,17 @@ fun NfcReadScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Button(onClick = onCreateClick) {
-                    Text("Grabar Otro Personaje")
+                // BOTONES DE ACCIÓN
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Button(onClick = onScanAgainClick) { // <--- ESTE BOTÓN TE DEJA LEER DE NUEVO
+                        Text("Leer Otro")
+                    }
+                    OutlinedButton(onClick = onCreateClick) {
+                        Text("Grabar")
+                    }
                 }
             }
         }
