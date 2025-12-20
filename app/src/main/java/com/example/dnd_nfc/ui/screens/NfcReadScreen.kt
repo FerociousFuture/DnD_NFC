@@ -1,102 +1,152 @@
 package com.example.dnd_nfc.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.model.CharacterSheet
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NfcReadScreen(
     character: CharacterSheet?,
     isWaiting: Boolean,
     onCreateClick: () -> Unit,
     onSignOutClick: () -> Unit,
-    onScanAgainClick: () -> Unit // <--- Nuevo parámetro
+    onScanAgainClick: () -> Unit,
+    onEditClick: () -> Unit // <--- NUEVO: Callback para editar
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-
-        Button(
-            onClick = onSignOutClick,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer
-            ),
-            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-        ) {
-            Text("Salir")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Lector Arcano", color = MaterialTheme.colorScheme.onBackground) },
+                actions = {
+                    IconButton(onClick = onSignOutClick) {
+                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Salir", tint = MaterialTheme.colorScheme.error)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
         }
-
-        Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text("D&D Mini Reader", style = MaterialTheme.typography.headlineLarge)
-            Spacer(modifier = Modifier.height(40.dp))
-
             if (character == null) {
                 // ESTADO: ESPERANDO LECTURA
-                CircularProgressIndicator(modifier = Modifier.size(64.dp))
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("Acerca la miniatura al teléfono...")
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(onClick = onCreateClick) {
-                    Text("Grabar Nuevo Personaje")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Si no tienes un icono custom, usa uno de sistema o texto
+                    Icon(
+                        painter = painterResource(id = android.R.drawable.ic_menu_search),
+                        contentDescription = null,
+                        modifier = Modifier.size(80.dp),
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        "Acerca una miniatura...",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    if (isWaiting) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
+                    }
+                    Spacer(modifier = Modifier.height(48.dp))
+
+                    OutlinedButton(onClick = onCreateClick) {
+                        Text("O graba una nueva")
+                    }
                 }
             } else {
-                // ESTADO: PERSONAJE LEÍDO
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                // ESTADO: FICHA DE PERSONAJE MOSTRADA
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Personaje detectado:", style = MaterialTheme.typography.titleMedium)
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    // Encabezado
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(character.n, style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.secondary)
+                            Text("${character.r} - ${character.c}", style = MaterialTheme.typography.titleMedium, color = Color.LightGray)
+                        }
+                    }
 
-                        Text("Nombre: ${character.n}")
-                        Text("Clase: ${character.c}")
-                        Text("Raza: ${character.r}")
+                    // Estadísticas en Grid
+                    Text("Atributos", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
 
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Atributos:", style = MaterialTheme.typography.titleSmall)
+                    val stats = character.s.split("-")
+                    val labels = listOf("FUE", "DES", "CON", "INT", "SAB", "CAR")
 
-                        val stats = character.s.split("-")
-                        val labels = listOf("FUE", "DES", "CON", "INT", "SAB", "CAR")
+                    if (stats.size == 6) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatBox(labels[0], stats[0], Modifier.weight(1f))
+                            StatBox(labels[1], stats[1], Modifier.weight(1f))
+                            StatBox(labels[2], stats[2], Modifier.weight(1f))
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatBox(labels[3], stats[3], Modifier.weight(1f))
+                            StatBox(labels[4], stats[4], Modifier.weight(1f))
+                            StatBox(labels[5], stats[5], Modifier.weight(1f))
+                        }
+                    }
 
-                        if (stats.size == 6) {
-                            stats.forEachIndexed { index, value ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(labels[index], style = MaterialTheme.typography.bodyMedium)
-                                    Text(value, style = MaterialTheme.typography.bodyLarge)
-                                }
-                            }
-                        } else {
-                            Text("Estadísticas: ${character.s}")
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Botones inferiores
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Button(
+                            onClick = onScanAgainClick,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                        ) {
+                            Text("Leer Otro", color = MaterialTheme.colorScheme.onTertiaryContainer)
+                        }
+
+                        // BOTÓN MODIFICAR
+                        Button(
+                            onClick = onEditClick,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Modificar")
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // BOTONES DE ACCIÓN
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Button(onClick = onScanAgainClick) { // <--- ESTE BOTÓN TE DEJA LEER DE NUEVO
-                        Text("Leer Otro")
-                    }
-                    OutlinedButton(onClick = onCreateClick) {
-                        Text("Grabar")
-                    }
-                }
             }
+        }
+    }
+}
+
+@Composable
+fun StatBox(label: String, value: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(Color(0xFF2C2C2C), RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFF444444), RoundedCornerShape(8.dp))
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+            Text(value, fontSize = 24.sp, color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }

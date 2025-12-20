@@ -1,9 +1,9 @@
 package com.example.dnd_nfc.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -13,11 +13,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -26,46 +28,63 @@ import androidx.compose.ui.unit.sp
 fun NfcWriteScreen(
     onReadyToWrite: (String) -> Unit
 ) {
-    // --- LISTAS PREDEFINIDAS ---
+    // --- DATOS ---
     val classList = listOf(
-        "Bárbaro", "Bardo", "Brujo (Warlock)", "Clérigo", "Druida",
-        "Explorador (Ranger)", "Guerrero (Fighter)", "Hechicero (Sorcerer)",
-        "Mago (Wizard)", "Monje", "Paladín", "Pícaro (Rogue)", "Artífice (Artificer)"
+        "Bárbaro", "Bardo", "Brujo", "Clérigo", "Druida",
+        "Explorador", "Guerrero", "Hechicero",
+        "Mago", "Monje", "Paladín", "Pícaro", "Artífice"
     )
     val raceList = listOf(
         "Dracónido", "Enano", "Elfo", "Gnomo", "Humano", "Mediano",
         "Semielfo", "SemiOrco", "Tiflin", "Aasimar", "Goliat", "Orco"
     )
-    // Lista de números para stats (1 al 20)
-    val statValues = (1..20).map { it.toString() }
 
     // --- ESTADO ---
     var name by remember { mutableStateOf("") }
     var selectedClass by remember { mutableStateOf(classList[0]) }
-    var selectedRace by remember { mutableStateOf(raceList[4]) } // Default: Humano
+    var selectedRace by remember { mutableStateOf(raceList[4]) }
 
-    // Stats (Por defecto 10)
-    var str by remember { mutableStateOf("10") }
-    var dex by remember { mutableStateOf("10") }
-    var con by remember { mutableStateOf("10") }
-    var int by remember { mutableStateOf("10") }
-    var wis by remember { mutableStateOf("10") }
-    var cha by remember { mutableStateOf("10") }
+    // Estadísticas Base (Point Buy empieza en 8)
+    var str by remember { mutableIntStateOf(8) }
+    var dex by remember { mutableIntStateOf(8) }
+    var con by remember { mutableIntStateOf(8) }
+    var int by remember { mutableIntStateOf(8) }
+    var wis by remember { mutableIntStateOf(8) }
+    var cha by remember { mutableIntStateOf(8) }
 
-    // Cálculo dinámico de la suma (Solo visual)
-    val totalStats = (str.toIntOrNull() ?: 0) +
-            (dex.toIntOrNull() ?: 0) +
-            (con.toIntOrNull() ?: 0) +
-            (int.toIntOrNull() ?: 0) +
-            (wis.toIntOrNull() ?: 0) +
-            (cha.toIntOrNull() ?: 0)
+    // --- LÓGICA DE POINT BUY ---
+    // Coste acumulado para llegar a X valor desde 8
+    fun getCost(score: Int): Int {
+        return when (score) {
+            8 -> 0
+            9 -> 1
+            10 -> 2
+            11 -> 3
+            12 -> 4
+            13 -> 5
+            14 -> 7 // Salto de coste
+            15 -> 9 // Salto de coste
+            else -> 0
+        }
+    }
 
-    // Color del indicador de suma según el poder (Visual feedback)
-    val totalColor = when {
-        totalStats < 60 -> Color.Gray       // Débil
-        totalStats in 60..75 -> Color.White // Promedio
-        totalStats in 76..85 -> Color(0xFFFFD700) // Heroico (Dorado)
-        else -> Color(0xFFB00020)           // Legendario/Roto (Rojo)
+    val totalPointsSpent = getCost(str) + getCost(dex) + getCost(con) + getCost(int) + getCost(wis) + getCost(cha)
+    val maxPoints = 27
+    val remainingPoints = maxPoints - totalPointsSpent
+
+    // Función para intentar cambiar un stat
+    fun tryUpdateStat(currentVal: Int, delta: Int, setter: (Int) -> Unit) {
+        val newVal = currentVal + delta
+        if (newVal !in 8..15) return // Límites hardcap de 5e
+
+        val costDiff = getCost(newVal) - getCost(currentVal)
+
+        // Si subimos, checamos si hay puntos. Si bajamos, siempre se puede.
+        if (delta > 0) {
+            if (remainingPoints >= costDiff) setter(newVal)
+        } else {
+            setter(newVal)
+        }
     }
 
     Scaffold(
@@ -86,75 +105,70 @@ fun NfcWriteScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 1. NOMBRE (Texto Libre)
+            // --- IDENTIDAD ---
             Text("Identidad", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
-                label = { Text("Nombre del Personaje") },
+                label = { Text("Nombre") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                leadingIcon = { Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary) },
                 keyboardOptions = KeyboardOptions.Default.copy(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done)
             )
 
-            // 2. SELECTORES DE RAZA Y CLASE
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Dropdown Clase
                 Box(modifier = Modifier.weight(1f)) {
                     DnDDropdown(label = "Clase", options = classList, selected = selectedClass) { selectedClass = it }
                 }
-                // Dropdown Raza
                 Box(modifier = Modifier.weight(1f)) {
                     DnDDropdown(label = "Raza", options = raceList, selected = selectedRace) { selectedRace = it }
                 }
             }
 
-            Divider(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
 
-            // 3. ESTADÍSTICAS (Dropdowns)
+            // --- POINT BUY HEADER ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Atributos", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
+                Text("Estadísticas (Point Buy)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary)
 
-                // INDICADOR DE SUMA TOTAL (Visual)
+                // Indicador de Puntos
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.padding(start = 8.dp)
+                    color = if (remainingPoints < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant,
                 ) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                        Text("Total: ", style = MaterialTheme.typography.labelLarge)
+                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                        Icon(Icons.Default.AutoGraph, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "$totalStats",
+                            text = "Puntos: $remainingPoints / $maxPoints",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = totalColor
+                            color = if (remainingPoints == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
             }
 
-            // Grid de Stats (2 filas x 3 columnas)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatDropdown("FUE", Icons.Default.FitnessCenter, statValues, str) { str = it }
-                StatDropdown("DES", Icons.Default.DirectionsRun, statValues, dex) { dex = it }
-                StatDropdown("CON", Icons.Default.Shield, statValues, con) { con = it }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatDropdown("INT", Icons.Default.AutoStories, statValues, int) { int = it }
-                StatDropdown("SAB", Icons.Default.Visibility, statValues, wis) { wis = it }
-                StatDropdown("CAR", Icons.Default.Favorite, statValues, cha) { cha = it }
+            // --- LISTA DE STATS CON +/- ---
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                StatRow("Fuerza", "FUE", Icons.Default.FitnessCenter, str, remainingPoints) { tryUpdateStat(str, it) { v -> str = v } }
+                StatRow("Destreza", "DES", Icons.Default.DirectionsRun, dex, remainingPoints) { tryUpdateStat(dex, it) { v -> dex = v } }
+                StatRow("Constitución", "CON", Icons.Default.Shield, con, remainingPoints) { tryUpdateStat(con, it) { v -> con = v } }
+                StatRow("Inteligencia", "INT", Icons.Default.AutoStories, int, remainingPoints) { tryUpdateStat(int, it) { v -> int = v } }
+                StatRow("Sabiduría", "SAB", Icons.Default.Visibility, wis, remainingPoints) { tryUpdateStat(wis, it) { v -> wis = v } }
+                StatRow("Carisma", "CAR", Icons.Default.Favorite, cha, remainingPoints) { tryUpdateStat(cha, it) { v -> cha = v } }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // 4. BOTÓN DE GRABAR
+            // --- BOTÓN DE GRABAR ---
             Button(
                 onClick = {
                     val safeName = name.replace(",", " ").trim().ifEmpty { "Sin Nombre" }
-                    // Construimos CSV: Nombre,Clase,Raza,FUE,DES,CON,INT,SAB,CAR
+                    // Guardamos los valores finales
                     val csvData = "$safeName,$selectedClass,$selectedRace,$str,$dex,$con,$int,$wis,$cha"
                     onReadyToWrite(csvData)
                 },
@@ -170,8 +184,93 @@ fun NfcWriteScreen(
     }
 }
 
-// --- COMPONENTES REUTILIZABLES ---
+// --- COMPONENTE DE FILA DE ESTADÍSTICA ---
+@Composable
+fun StatRow(
+    fullName: String,
+    abbr: String,
+    icon: ImageVector,
+    value: Int,
+    poolPoints: Int,
+    onValueChange: (Int) -> Unit
+) {
+    // Calculamos si se puede subir (coste siguiente nivel)
+    val nextCost = when (value) {
+        in 8..12 -> 1
+        in 13..14 -> 2
+        else -> 999
+    }
+    val canIncrease = value < 15 && poolPoints >= nextCost
+    val canDecrease = value > 8
 
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Icono y Nombre
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(fullName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(abbr, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
+            }
+
+            // Controles +/-
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Botón Menos
+                IconButton(
+                    onClick = { onValueChange(-1) },
+                    enabled = canDecrease,
+                    modifier = Modifier.background(Color.Transparent)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RemoveCircleOutline,
+                        contentDescription = "Bajar",
+                        tint = if (canDecrease) MaterialTheme.colorScheme.onSurface else Color.DarkGray
+                    )
+                }
+
+                // Valor Central
+                Text(
+                    text = "$value",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.width(40.dp),
+                    textAlign = TextAlign.Center,
+                    color = if (value == 15) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface
+                )
+
+                // Botón Más
+                IconButton(
+                    onClick = { onValueChange(1) },
+                    enabled = canIncrease
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AddCircle,
+                        contentDescription = "Subir",
+                        tint = if (canIncrease) MaterialTheme.colorScheme.primary else Color.DarkGray
+                    )
+                }
+            }
+        }
+    }
+}
+
+// --- DROPDOWN (Reutilizado del anterior) ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DnDDropdown(
@@ -196,7 +295,8 @@ fun DnDDropdown(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.secondary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline
-            )
+            ),
+            singleLine = true
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -210,53 +310,6 @@ fun DnDDropdown(
                         expanded = false
                     }
                 )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun RowScope.StatDropdown(
-    label: String,
-    icon: ImageVector,
-    options: List<String>,
-    selected: String,
-    onSelectionChanged: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.weight(1f)) {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded }
-        ) {
-            OutlinedTextField(
-                value = selected,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(label, fontSize = 11.sp) },
-                leadingIcon = { Icon(icon, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary) },
-                trailingIcon = null, // Sin flecha para ahorrar espacio
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.height(300.dp) // Limitamos altura para scroll
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option) },
-                        onClick = {
-                            onSelectionChanged(option)
-                            expanded = false
-                        },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    )
-                }
             }
         }
     }

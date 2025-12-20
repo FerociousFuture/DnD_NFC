@@ -7,13 +7,14 @@ import android.nfc.Tag
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler // <--- IMPORTANTE: Importar esto
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import com.example.dnd_nfc.data.model.CharacterSheet
 import com.example.dnd_nfc.data.remote.GoogleAuthClient
 import com.example.dnd_nfc.nfc.NfcManager
 import com.example.dnd_nfc.ui.screens.AuthScreen
+import com.example.dnd_nfc.ui.screens.NfcEditScreen // Asegúrate de tener este archivo creado
 import com.example.dnd_nfc.ui.screens.NfcReadScreen
 import com.example.dnd_nfc.ui.screens.NfcWriteScreen
 import com.example.dnd_nfc.ui.theme.DnD_NFCTheme
@@ -34,12 +35,12 @@ class MainActivity : ComponentActivity() {
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         googleAuthClient = GoogleAuthClient(this)
 
-        // Determinamos la pantalla inicial
+        // Verificamos si hay usuario logueado
         val startDestination = if (Firebase.auth.currentUser != null) "read" else "auth"
 
         setContent {
             DnD_NFCTheme {
-                // Estado de la navegación
+                // Estado de navegación
                 var currentScreen by remember { mutableStateOf(startDestination) }
 
                 // Observamos el personaje escaneado
@@ -52,11 +53,19 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     "read" -> {
-                        // Si estás en el Home y das Atrás, sale de la app (comportamiento normal)
+                        // Pantalla de Lectura / Home
                         NfcReadScreen(
                             character = characterState,
                             isWaiting = true,
                             onCreateClick = { currentScreen = "write" },
+                            onEditClick = {
+                                // Navegar a editar solo si hay personaje
+                                if (characterState != null) {
+                                    currentScreen = "edit"
+                                } else {
+                                    Toast.makeText(applicationContext, "Primero escanea un personaje", Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             onSignOutClick = {
                                 googleAuthClient.signOut()
                                 currentScreen = "auth"
@@ -68,13 +77,28 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
-                    "write" -> {
-                        // --- AQUÍ ESTÁ LA MAGIA ---
-                        // Interceptamos el botón "Atrás" físico del celular
-                        BackHandler(enabled = true) {
-                            // En lugar de cerrar la app, volvemos al lector
+                    "edit" -> {
+                        // Pantalla de Edición
+                        BackHandler(enabled = true) { currentScreen = "read" }
+
+                        if (characterState != null) {
+                            NfcEditScreen(
+                                character = characterState!!,
+                                onReadyToWrite = { csvData ->
+                                    pendingWriteData = csvData
+                                    Toast.makeText(this, "Acerca la etiqueta para SOBREESCRIBIR", Toast.LENGTH_LONG).show()
+                                },
+                                onCancel = { currentScreen = "read" }
+                            )
+                        } else {
+                            // Fallback por si acaso
                             currentScreen = "read"
-                            // Opcional: Cancelamos cualquier escritura pendiente
+                        }
+                    }
+                    "write" -> {
+                        // Pantalla de Creación Nueva
+                        BackHandler(enabled = true) {
+                            currentScreen = "read"
                             pendingWriteData = null
                         }
 
@@ -115,12 +139,18 @@ class MainActivity : ComponentActivity() {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
             if (pendingWriteData != null && tag != null) {
-                // MODO ESCRITURA
+                // MODO ESCRITURA (Ya sea Nuevo o Edición)
                 val success = NfcManager.writeToTag(tag, pendingWriteData!!)
                 if (success) {
                     Toast.makeText(this, "¡Personaje grabado correctamente!", Toast.LENGTH_LONG).show()
                     pendingWriteData = null
-                    // Opcional: Podrías limpiar el formulario o volver a leer aquí
+
+                    // Opcional: Podrías leer inmediatamente lo que acabas de escribir
+                    // para mostrarlo actualizado en pantalla.
+                    val updatedChar = NfcManager.readFromIntent(intent)
+                    if (updatedChar != null) {
+                        _scannedCharacter.value = updatedChar
+                    }
                 } else {
                     Toast.makeText(this, "Error al escribir en la etiqueta", Toast.LENGTH_SHORT).show()
                 }
@@ -131,7 +161,6 @@ class MainActivity : ComponentActivity() {
                     _scannedCharacter.value = character
                     Toast.makeText(this, "Leído: ${character.n}", Toast.LENGTH_SHORT).show()
                 } else {
-                    // Si lee algo pero no es un personaje válido
                     Toast.makeText(this, "Etiqueta leída, pero no contiene un personaje válido", Toast.LENGTH_SHORT).show()
                 }
             }
