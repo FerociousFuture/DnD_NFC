@@ -7,15 +7,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
+import com.example.dnd_nfc.data.model.CharacterSheet
 import com.example.dnd_nfc.nfc.NfcManager
 import com.example.dnd_nfc.ui.screens.NfcReadScreen
 import com.example.dnd_nfc.ui.theme.DnD_NFCTheme
 
-
 class MainActivity : ComponentActivity() {
     private var nfcAdapter: NfcAdapter? = null
-    private var scannedContent by mutableStateOf("")
-    private var isWaitingByNfc by mutableStateOf(true)
+
+    // Estado de la UI
+    private var scannedCharacter by mutableStateOf<CharacterSheet?>(null)
+    private var isWaiting by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,8 +26,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             DnD_NFCTheme {
                 NfcReadScreen(
-                    scannedData = scannedContent,
-                    isWaiting = isWaitingByNfc
+                    character = scannedCharacter,
+                    isWaiting = isWaiting
                 )
             }
         }
@@ -33,6 +35,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Activa la escucha prioritaria del NFC cuando la app está abierta
         val intent = Intent(this, javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_MUTABLE)
         nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
@@ -46,8 +49,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
-            scannedContent = NfcManager.readFromIntent(intent)
-            isWaitingByNfc = false
+            val result = NfcManager.readFromIntent(intent)
+            if (result != null) {
+                scannedCharacter = result
+                isWaiting = false
+            }
         }
     }
 }

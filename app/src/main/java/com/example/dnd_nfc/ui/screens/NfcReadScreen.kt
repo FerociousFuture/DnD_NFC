@@ -6,44 +6,44 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.dnd_nfc.data.model.CharacterSheet
 
 @Composable
 fun NfcReadScreen(
-    scannedData: String,
+    character: CharacterSheet?,
     isWaiting: Boolean
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Lector de Miniaturas",
+            text = "D&D Mini Reader",
             style = MaterialTheme.typography.headlineLarge
         )
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        if (isWaiting) {
+        if (isWaiting && character == null) {
             CircularProgressIndicator(modifier = Modifier.size(64.dp))
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Acerca tu miniatura a la parte trasera del teléfono")
-        } else {
+            Text("Acerca la miniatura al teléfono...")
+        } else if (character != null) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Datos Importados:", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = scannedData.ifEmpty { "No se detectaron datos válidos." })
+                    Text("Personaje detectado:", style = MaterialTheme.typography.titleMedium)
+                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                    Text("Nombre: ${character.n}")
+                    Text("Clase: ${character.c}")
+                    Text("Raza: ${character.r}")
+                    Text("Estadísticas: ${character.s}")
                 }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(onClick = { /* Aquí volveríamos a activar la espera */ }) {
-                Text("Escanear otra miniatura")
             }
         }
     }
