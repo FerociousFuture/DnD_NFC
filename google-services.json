@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "485986063620",
+    "project_id": "nfc-dnd-15b74",
+    "storage_bucket": "nfc-dnd-15b74.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:485986063620:android:59f4c5dc799b1fc9c16c51",
+        "android_client_info": {
+          "package_name": "com.example.dnd_nfc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDF2Z-NV3HVx--2V5XIY89eAqZmEyG4Doc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
