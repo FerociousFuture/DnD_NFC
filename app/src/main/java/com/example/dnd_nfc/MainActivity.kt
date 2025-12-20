@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import com.example.dnd_nfc.data.model.CharacterSheet
+import com.example.dnd_nfc.data.remote.GoogleAuthClient // Asegúrate de importar esto
 import com.example.dnd_nfc.nfc.NfcManager
 import com.example.dnd_nfc.ui.screens.AuthScreen
 import com.example.dnd_nfc.ui.screens.NfcReadScreen
@@ -21,23 +22,27 @@ import com.google.firebase.ktx.Firebase
 class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
-    // Variable para guardar los datos pendientes de escribir
     private var pendingWriteData: String? = null
+
+    // Instancia del cliente de autenticación
+    private lateinit var googleAuthClient: GoogleAuthClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
-        // Verificamos si ya hay usuario logueado al iniciar
+        // Inicializamos el cliente
+        googleAuthClient = GoogleAuthClient(this)
+
+        // LÓGICA DE PERSISTENCIA:
+        // Si currentUser NO es null, el usuario sigue logueado y va directo a "read"
         val startDestination = if (Firebase.auth.currentUser != null) "read" else "auth"
 
         setContent {
             DnD_NFCTheme {
-                // Estado de navegación simple
                 var currentScreen by remember { mutableStateOf(startDestination) }
                 var scannedCharacter by remember { mutableStateOf<CharacterSheet?>(null) }
 
-                // --- PANTALLAS ---
                 when (currentScreen) {
                     "auth" -> AuthScreen(
                         onLoginSuccess = { currentScreen = "read" }
@@ -45,12 +50,19 @@ class MainActivity : ComponentActivity() {
                     "read" -> NfcReadScreen(
                         character = scannedCharacter,
                         isWaiting = true,
-                        onCreateClick = { currentScreen = "write" } // Botón para ir a escribir
+                        onCreateClick = { currentScreen = "write" },
+                        onSignOutClick = {
+                            // CERRAR SESIÓN
+                            googleAuthClient.signOut()
+                            currentScreen = "auth"
+                            scannedCharacter = null // Limpiamos datos viejos
+                            Toast.makeText(applicationContext, "Sesión cerrada", Toast.LENGTH_SHORT).show()
+                        }
                     )
                     "write" -> NfcWriteScreen(
                         onReadyToWrite = { csvData ->
                             pendingWriteData = csvData
-                            Toast.makeText(this, "¡Listo! Acerca una etiqueta NFC vacía", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this, "Acerca una etiqueta NFC para grabar", Toast.LENGTH_LONG).show()
                         }
                     )
                 }
@@ -58,7 +70,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- LÓGICA NFC (No cambia mucho) ---
     override fun onResume() {
         super.onResume()
         enableForegroundDispatch()
@@ -84,20 +95,25 @@ class MainActivity : ComponentActivity() {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
             if (pendingWriteData != null && tag != null) {
-                // MODO ESCRITURA
+                // Escritura
                 val success = NfcManager.writeToTag(tag, pendingWriteData!!)
                 if (success) {
-                    Toast.makeText(this, "¡Personaje grabado con éxito!", Toast.LENGTH_LONG).show()
-                    pendingWriteData = null // Reseteamos
+                    Toast.makeText(this, "¡Personaje grabado!", Toast.LENGTH_LONG).show()
+                    pendingWriteData = null
                 } else {
-                    Toast.makeText(this, "Error al escribir. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Error al escribir", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // MODO LECTURA
+                // Lectura
                 val character = NfcManager.readFromIntent(intent)
                 if (character != null) {
+                    // Aquí es donde en un futuro usaremos ViewModel, por ahora mostramos Toast
                     Toast.makeText(this, "Leído: ${character.n}", Toast.LENGTH_SHORT).show()
-                    // NOTA: En una app real usarías un ViewModel para actualizar la UI aquí
+
+                    // TRUCO TEMPORAL: Forzamos recomposición (en una app real usa ViewModel)
+                    // Como estamos dentro de onNewIntent, no tenemos acceso directo fácil a 'scannedCharacter' del setContent
+                    // Por ahora, solo verás el Toast.
+                    // Para ver la tarjeta en pantalla necesitaríamos mover 'scannedCharacter' a un ViewModel o variable global.
                 }
             }
         }

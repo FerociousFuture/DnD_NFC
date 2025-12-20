@@ -1,6 +1,9 @@
 package com.example.dnd_nfc.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -12,80 +15,91 @@ import com.example.dnd_nfc.data.model.CharacterSheet
 fun NfcReadScreen(
     character: CharacterSheet?,
     isWaiting: Boolean,
-    onCreateClick: () -> Unit // <--- Este es el parámetro nuevo que faltaba
+    onCreateClick: () -> Unit,
+    onSignOutClick: () -> Unit // <--- Nuevo parámetro para cerrar sesión
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "D&D Mini Reader",
-            style = MaterialTheme.typography.headlineLarge
-        )
+    Box(modifier = Modifier.fillMaxSize()) {
 
-        Spacer(modifier = Modifier.height(40.dp))
+        // Botón de Cerrar Sesión (Esquina superior derecha)
+        Button(
+            onClick = onSignOutClick,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+        ) {
+            Text("Salir")
+        }
 
-        if (isWaiting && character == null) {
-            CircularProgressIndicator(modifier = Modifier.size(64.dp))
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Acerca la miniatura al teléfono...")
+        // Contenido Principal (Centrado)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "D&D Mini Reader",
+                style = MaterialTheme.typography.headlineLarge
+            )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
-            // Botón para ir a la pantalla de crear personaje
-            Button(onClick = onCreateClick) {
-                Text("Grabar Nuevo Personaje (Modo DM)")
-            }
+            if (isWaiting && character == null) {
+                CircularProgressIndicator(modifier = Modifier.size(64.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Acerca la miniatura al teléfono...")
 
-        } else if (character != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Personaje detectado:", style = MaterialTheme.typography.titleMedium)
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-                    Text("Nombre: ${character.n}")
-                    Text("Clase: ${character.c}")
-                    Text("Raza: ${character.r}")
+                Button(onClick = onCreateClick) {
+                    Text("Grabar Nuevo Personaje")
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Atributos Principales:", style = MaterialTheme.typography.titleSmall)
+            } else if (character != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Personaje detectado:", style = MaterialTheme.typography.titleMedium)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    val stats = character.s.split("-")
-                    val labels = listOf(
-                        "Fuerza (FUE)",
-                        "Destreza (DES)",
-                        "Constitución (CON)",
-                        "Inteligencia (INT)",
-                        "Sabiduría (SAB)",
-                        "Carisma (CAR)"
-                    )
+                        Text("Nombre: ${character.n}")
+                        Text("Clase: ${character.c}")
+                        Text("Raza: ${character.r}")
 
-                    if (stats.size == 6) {
-                        stats.forEachIndexed { index, value ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(text = labels[index], style = MaterialTheme.typography.bodyMedium)
-                                Text(text = value, style = MaterialTheme.typography.bodyLarge)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Atributos Principales:", style = MaterialTheme.typography.titleSmall)
+
+                        val stats = character.s.split("-")
+                        val labels = listOf(
+                            "Fuerza", "Destreza", "Constitución",
+                            "Inteligencia", "Sabiduría", "Carisma"
+                        )
+
+                        if (stats.size == 6) {
+                            stats.forEachIndexed { index, value ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = labels[index], style = MaterialTheme.typography.bodyMedium)
+                                    Text(text = value, style = MaterialTheme.typography.bodyLarge)
+                                }
                             }
+                        } else {
+                            Text("Estadísticas: ${character.s}")
                         }
-                    } else {
-                        Text("Estadísticas: ${character.s}")
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Button(onClick = onCreateClick) {
-                Text("Grabar Otro Personaje")
+                Button(onClick = onCreateClick) {
+                    Text("Grabar Otro Personaje")
+                }
             }
         }
     }
