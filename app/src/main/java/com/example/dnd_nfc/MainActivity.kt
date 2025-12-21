@@ -22,6 +22,7 @@ import com.google.firebase.ktx.Firebase
 class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
+    // Variable para guardar los datos pendientes de escribir en NFC (CSV)
     private var pendingWriteData: String? = null
     private lateinit var googleAuthClient: GoogleAuthClient
 
@@ -72,10 +73,11 @@ class MainActivity : ComponentActivity() {
 
                     "read" -> {
                         BackHandler { currentScreen = "menu" }
+                        // Usamos la nueva versión de NfcReadScreen que descarga de la nube
                         NfcReadScreen(
                             nfcCharacter = scannedNfcChar,
                             onFullCharacterLoaded = { fullChar ->
-                                // ¡Éxito! El NFC tenía ID válido y bajamos la data de la nube
+                                // ¡Éxito! Del NFC pasamos directo a la hoja completa
                                 selectedFullCharacter = fullChar
                                 currentScreen = "full_sheet"
                             },
@@ -98,13 +100,13 @@ class MainActivity : ComponentActivity() {
                     }
 
                     "full_sheet" -> {
-                        // Al salir de la hoja, volvemos a la biblioteca (o podrías decidir volver a read si vienes de ahí)
+                        // Al salir de la hoja, volvemos a la biblioteca
                         BackHandler { currentScreen = "library" }
                         CharacterSheetScreen(
                             existingCharacter = selectedFullCharacter,
                             onBack = { currentScreen = "library" },
                             onWriteNfc = { char ->
-                                // Aquí iniciamos el proceso de grabación
+                                // Aquí iniciamos el proceso de grabación en tarjeta física
                                 charToWriteToNfc = char
                                 currentScreen = "write"
                             }
@@ -126,8 +128,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // Eliminamos "edit" porque ahora se edita directo en "full_sheet"
-                    else -> { currentScreen = "menu" }
+                    // ELIMINADO: case "edit" -> NfcEditScreen... (Ya no existe)
                 }
             }
         }
@@ -161,7 +162,6 @@ class MainActivity : ComponentActivity() {
                 if (success) {
                     Toast.makeText(this, "¡Personaje vinculado exitosamente!", Toast.LENGTH_LONG).show()
                     pendingWriteData = null
-                    // Opcional: Volver a la hoja automáticamente
                 } else {
                     Toast.makeText(this, "Error al escribir en NFC.", Toast.LENGTH_SHORT).show()
                 }
@@ -170,7 +170,8 @@ class MainActivity : ComponentActivity() {
                 val character = NfcManager.readFromIntent(intent)
                 if (character != null) {
                     _scannedNfcData.value = character
-                    _navigateToRead.value = true // Forzar navegación al lector
+                    // Forzamos navegación al lector para que procese el ID
+                    _navigateToRead.value = true
                 } else {
                     Toast.makeText(this, "Formato NFC desconocido o vacío.", Toast.LENGTH_SHORT).show()
                 }
