@@ -22,91 +22,105 @@ import com.google.firebase.ktx.Firebase
 class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
-    // Variable para guardar los datos pendientes de escribir en NFC (CSV)
     private var pendingWriteData: String? = null
-
     private lateinit var googleAuthClient: GoogleAuthClient
 
-    // Estado del personaje escaneado por NFC (fuera de setContent para acceso en onNewIntent)
     private val _scannedCharacter = mutableStateOf<CharacterSheet?>(null)
+
+    // Variable para controlar la navegación desde fuera de la UI (ej. al escanear)
+    private val _navigateToRead = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Inicialización de hardware y servicios
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         googleAuthClient = GoogleAuthClient(this)
 
-        // Verificamos sesión para decidir pantalla inicial
-        val startDestination = if (Firebase.auth.currentUser != null) "read" else "auth"
+        // Si ya hay usuario, vamos al MENÚ, no directo al lector
+        val startDestination = if (Firebase.auth.currentUser != null) "menu" else "auth"
 
         setContent {
             DnD_NFCTheme {
-                // --- ESTADOS DE NAVEGACIÓN ---
                 var currentScreen by remember { mutableStateOf(startDestination) }
-
-                // Estado del Lector NFC
                 val scannedNfcChar by _scannedCharacter
-
-                // Estado para la Biblioteca (Ficha Completa)
                 var selectedFullCharacter by remember { mutableStateOf<PlayerCharacter?>(null) }
+
+                // Efecto para navegar automáticamente si se escanea algo en el menú
+                val shouldNavigate by _navigateToRead
+                LaunchedEffect(shouldNavigate) {
+                    if (shouldNavigate && currentScreen != "read") {
+                        currentScreen = "read"
+                        _navigateToRead.value = false
+                    }
+                }
 
                 when (currentScreen) {
                     // 1. LOGIN
                     "auth" -> {
-                        AuthScreen(
-                            onLoginSuccess = { currentScreen = "read" }
-                        )
+                        AuthScreen(onLoginSuccess = { currentScreen = "menu" })
                     }
 
-                    // 2. HOME / LECTOR NFC
-                    "read" -> {
-                        NfcReadScreen(
-                            character = scannedNfcChar,
-                            isWaiting = true,
-                            onCreateClick = { currentScreen = "write" }, // Ir a Grabar NFC
-                            onEditClick = {
-                                if (scannedNfcChar != null) {
-                                    currentScreen = "edit"
-                                } else {
-                                    Toast.makeText(this, "Primero escanea un personaje", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            onLibraryClick = { currentScreen = "library" }, // Ir a Biblioteca
+                    // 2. MENÚ PRINCIPAL (NUEVO HUB)
+                    "menu" -> {
+                        MainMenuScreen(
+                            onNfcClick = { currentScreen = "read" },
+                            onLibraryClick = { currentScreen = "library" },
                             onSignOutClick = {
                                 googleAuthClient.signOut()
                                 currentScreen = "auth"
                                 _scannedCharacter.value = null
+                            }
+                        )
+                    }
+
+                    // 3. LECTOR NFC
+                    "read" -> {
+                        BackHandler { currentScreen = "menu" } // Volver al menú
+
+                        NfcReadScreen(
+                            character = scannedNfcChar,
+                            isWaiting = true,
+                            onCreateClick = { currentScreen = "write" },
+                            onEditClick = {
+                                if (scannedNfcChar != null) currentScreen = "edit"
+                                else Toast.makeText(this, "Primero escanea un personaje", Toast.LENGTH_SHORT).show()
+                            },
+                            // Como ya tenemos menú, estos botones son atajos opcionales
+                            onLibraryClick = { currentScreen = "library" },
+                            onSignOutClick = {
+                                googleAuthClient.signOut()
+                                currentScreen = "auth"
                             },
                             onScanAgainClick = { _scannedCharacter.value = null }
                         )
                     }
 
-                    // 3. BIBLIOTECA DE PERSONAJES (CLOUD)
+                    // 4. BIBLIOTECA
                     "library" -> {
-                        BackHandler { currentScreen = "read" } // Atrás -> Home
+                        BackHandler { currentScreen = "menu" } // Volver al menú
+
                         CharacterListScreen(
                             onCharacterClick = { char ->
                                 selectedFullCharacter = char
                                 currentScreen = "full_sheet"
                             },
                             onNewCharacterClick = {
-                                selectedFullCharacter = null // Null indica crear nuevo
+                                selectedFullCharacter = null
                                 currentScreen = "full_sheet"
                             }
                         )
                     }
 
-                    // 4. HOJA DE PERSONAJE COMPLETA (TABS)
+                    // 5. HOJA COMPLETA
                     "full_sheet" -> {
-                        BackHandler { currentScreen = "library" } // Atrás -> Lista
+                        BackHandler { currentScreen = "library" }
                         CharacterSheetScreen(
                             existingCharacter = selectedFullCharacter,
                             onBack = { currentScreen = "library" }
                         )
                     }
 
-                    // 5. EDITOR RÁPIDO NFC
+                    // 6. NFC ESCRITURA/EDICIÓN
                     "edit" -> {
                         BackHandler { currentScreen = "read" }
                         if (scannedNfcChar != null) {
@@ -118,12 +132,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onCancel = { currentScreen = "read" }
                             )
-                        } else {
-                            currentScreen = "read"
-                        }
+                        } else { currentScreen = "read" }
                     }
-
-                    // 6. CREADOR NFC NUEVO
                     "write" -> {
                         BackHandler {
                             currentScreen = "read"
@@ -141,7 +151,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- CICLO DE VIDA NFC ---
     override fun onResume() {
         super.onResume()
         enableForegroundDispatch()
@@ -158,7 +167,6 @@ class MainActivity : ComponentActivity() {
         nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
     }
 
-    // --- DETECCIÓN DE ETIQUETA ---
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
 
@@ -167,29 +175,27 @@ class MainActivity : ComponentActivity() {
 
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
-            // CASO A: ESCRITURA PENDIENTE
             if (pendingWriteData != null && tag != null) {
+                // Modo Escritura
                 val success = NfcManager.writeToTag(tag, pendingWriteData!!)
                 if (success) {
                     Toast.makeText(this, "¡Escritura Exitosa!", Toast.LENGTH_LONG).show()
                     pendingWriteData = null
-
-                    // Opcional: Leer lo que acabamos de escribir para confirmar visualmente
                     val updatedChar = NfcManager.readFromIntent(intent)
                     if (updatedChar != null) _scannedCharacter.value = updatedChar
-
                 } else {
-                    Toast.makeText(this, "Error al escribir. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Error al escribir.", Toast.LENGTH_SHORT).show()
                 }
-            }
-            // CASO B: LECTURA NORMAL
-            else {
+            } else {
+                // Modo Lectura
                 val character = NfcManager.readFromIntent(intent)
                 if (character != null) {
                     _scannedCharacter.value = character
                     Toast.makeText(this, "¡Minis detectada: ${character.n}!", Toast.LENGTH_SHORT).show()
+                    // Si estamos en el menú, forzamos la navegación al lector
+                    _navigateToRead.value = true
                 } else {
-                    Toast.makeText(this, "Etiqueta leída, pero formato desconocido.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Formato desconocido.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
