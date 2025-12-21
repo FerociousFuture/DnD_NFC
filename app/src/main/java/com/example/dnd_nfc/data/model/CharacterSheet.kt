@@ -1,16 +1,8 @@
 package com.example.dnd_nfc.data.model
 
-/**
- * Representa los datos básicos de la hoja de personaje de D&D de forma compacta para ahorrar espacio en NFC.
- * * @param n Nombre del personaje.
- * @param c Clase del personaje.
- * @param r Raza del personaje.
- * @param s Estadísticas principales separadas por guiones.
- * El orden estándar procesado es: FUE-DES-CON-INT-SAB-CAR.
- */
+// Modelo ligero para el NFC (Solo llave y referencia visual rápida)
 data class CharacterSheet(
-    val n: String,
-    val c: String,
-    val r: String,
-    val s: String
+    val id: String = "", // ID para buscar en Firebase
+    val n: String = "",  // Nombre (para confirmar que es la tarjeta correcta)
+    val s: String = ""   // Stats (ej: "10-12-14-10-8-15") para preview rápido
 )

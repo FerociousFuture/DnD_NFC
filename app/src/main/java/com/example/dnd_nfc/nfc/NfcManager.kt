@@ -12,75 +12,48 @@ import java.nio.charset.Charset
 
 object NfcManager {
 
-    /**
-     * Lee el Intent NFC y procesa el formato CSV compacto:
-     * "Nombre,Clase,Raza,FUE,DES,CON,INT,SAB,CAR"
-     */
     fun readFromIntent(intent: Intent): CharacterSheet? {
-        val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
+        val rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES) ?: return null
+        val msgs = rawMsgs.map { it as NdefMessage }
+        if (msgs.isEmpty()) return null
 
-        if (rawMessages != null && rawMessages.isNotEmpty()) {
-            val msg = rawMessages[0] as NdefMessage
+        val record = msgs[0].records[0]
+        val payload = String(record.payload, Charset.forName("UTF-8"))
 
-            // Verificamos que el registro no esté vacío
-            if (msg.records.isEmpty()) return null
+        // NUEVO FORMATO: ID,Nombre,F,D,C,I,S,Car (Total 8 partes)
+        val parts = payload.split(",")
 
-            val payloadBytes = msg.records[0].payload
-
-            // Lógica para saltar la cabecera de idioma (Status byte + Language code) estándar de NDEF
-            // El primer byte indica la longitud del código de idioma (bits 0-5)
-            val languageCodeLength = payloadBytes[0].toInt() and 0x3F
-
-            // El contenido real empieza después del status byte y del código de idioma
-            val payload = String(
-                payloadBytes,
-                languageCodeLength + 1,
-                payloadBytes.size - languageCodeLength - 1,
-                Charset.forName("UTF-8")
+        // Verificamos que tenga al menos 8 partes (ID + Nombre + 6 Stats)
+        return if (parts.size >= 8) {
+            CharacterSheet(
+                id = parts[0],
+                n = parts[1],
+                // Construimos el string de stats uniendo las partes 2 a 7
+                s = "${parts[2]}-${parts[3]}-${parts[4]}-${parts[5]}-${parts[6]}-${parts[7]}"
             )
-
-            // Dividimos por coma para el formato CSV
-            val parts = payload.split(",")
-
-            // Verificamos que existan al menos los 3 campos base + 6 estadísticas = 9 campos
-            if (parts.size >= 9) {
-                return CharacterSheet(
-                    n = parts[0].trim(),
-                    c = parts[1].trim(),
-                    r = parts[2].trim(),
-                    // Unimos las estadísticas con guiones para el modelo interno
-                    s = parts.subList(3, 9).joinToString("-") { it.trim() }
-                )
-            }
+        } else {
+            null
         }
-        return null
     }
 
-    /**
-     * Escribe los datos en la etiqueta NFC en formato CSV.
-     * Retorna true si la escritura fue exitosa.
-     */
-    fun writeToTag(tag: Tag, data: String): Boolean {
-        val ndefRecord = createTextRecord(data)
-        val ndefMessage = NdefMessage(arrayOf(ndefRecord))
+    fun writeToTag(tag: Tag, csvData: String): Boolean {
+        // ... (El resto de la función de escritura se mantiene igual)
+        val record = NdefRecord.createMime("text/plain", csvData.toByteArray())
+        val message = NdefMessage(arrayOf(record))
 
         try {
             val ndef = Ndef.get(tag)
             if (ndef != null) {
                 ndef.connect()
-                if (!ndef.isWritable) {
-                    ndef.close()
-                    return false
-                }
-                ndef.writeNdefMessage(ndefMessage)
+                if (!ndef.isWritable) return false
+                ndef.writeNdefMessage(message)
                 ndef.close()
                 return true
             } else {
-                // Si la etiqueta no está formateada como NDEF, intentamos formatearla
                 val formatable = NdefFormatable.get(tag)
                 if (formatable != null) {
                     formatable.connect()
-                    formatable.format(ndefMessage)
+                    formatable.format(message)
                     formatable.close()
                     return true
                 }
@@ -89,25 +62,5 @@ object NfcManager {
             e.printStackTrace()
         }
         return false
-    }
-
-    /**
-     * Crea un registro NDEF de texto plano (RTD_TEXT).
-     */
-    private fun createTextRecord(text: String): NdefRecord {
-        val langBytes = "en".toByteArray(Charset.forName("US-ASCII"))
-        val textBytes = text.toByteArray(Charset.forName("UTF-8"))
-        val payload = ByteArray(1 + langBytes.size + textBytes.size)
-
-        // Status byte: Bit 7 = 0 (UTF-8), Bits 0-5 = longitud del código de idioma
-        payload[0] = langBytes.size.toByte()
-
-        // Copiamos el código de idioma
-        System.arraycopy(langBytes, 0, payload, 1, langBytes.size)
-
-        // Copiamos el texto
-        System.arraycopy(textBytes, 0, payload, 1 + langBytes.size, textBytes.size)
-
-        return NdefRecord(NdefRecord.TNF_WELL_KNOWN, NdefRecord.RTD_TEXT, ByteArray(0), payload)
     }
 }
