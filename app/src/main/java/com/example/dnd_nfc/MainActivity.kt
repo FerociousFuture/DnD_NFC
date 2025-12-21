@@ -10,9 +10,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
+import com.example.dnd_nfc.data.model.ScanEvent // Asegúrate de haber creado este archivo
 import com.example.dnd_nfc.data.model.CharacterSheet
 import com.example.dnd_nfc.data.model.PlayerCharacter
-import com.example.dnd_nfc.data.model.ScanEvent // <--- IMPORTANTE: Ahora importamos ScanEvent
 import com.example.dnd_nfc.data.remote.GoogleAuthClient
 import com.example.dnd_nfc.nfc.NfcManager
 import com.example.dnd_nfc.ui.screens.*
@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
     private var pendingWriteData: String? = null
     private lateinit var googleAuthClient: GoogleAuthClient
 
-    // Usamos ScanEvent para asegurar que cada lectura sea única
+    // Estado del escaneo (Evento único)
     private val _scannedEvent = mutableStateOf<ScanEvent?>(null)
     private val _navigateToRead = mutableStateOf(false)
 
@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
                 var selectedFullCharacter by remember { mutableStateOf<PlayerCharacter?>(null) }
                 var charToWriteToNfc by remember { mutableStateOf<PlayerCharacter?>(null) }
 
+                // Navegación automática si se escanea desde fuera
                 val shouldNavigate by _navigateToRead
                 LaunchedEffect(shouldNavigate) {
                     if (shouldNavigate && currentScreen != "read") {
@@ -57,7 +58,10 @@ class MainActivity : ComponentActivity() {
                     "auth" -> AuthScreen(onLoginSuccess = { currentScreen = "menu" })
 
                     "menu" -> MainMenuScreen(
-                        onNfcClick = { currentScreen = "read" },
+                        onNfcClick = {
+                            _scannedEvent.value = null // <--- RESETEO 1: Limpiamos al entrar manual
+                            currentScreen = "read"
+                        },
                         onLibraryClick = { currentScreen = "library" },
                         onSignOutClick = {
                             googleAuthClient.signOut()
@@ -67,11 +71,21 @@ class MainActivity : ComponentActivity() {
                     )
 
                     "read" -> {
-                        BackHandler { currentScreen = "menu" }
+                        BackHandler {
+                            _scannedEvent.value = null // Limpiamos al salir
+                            currentScreen = "menu"
+                        }
+
                         NfcReadScreen(
                             scanEvent = scanEvent,
                             onFullCharacterLoaded = { fullChar ->
+                                // ¡ÉXITO!
                                 selectedFullCharacter = fullChar
+
+                                // <--- RESETEO 2 (CRÍTICO): Matamos el evento de escaneo AQUÍ
+                                // Esto hace que la próxima vez que entres a "read", esté vacía.
+                                _scannedEvent.value = null
+
                                 currentScreen = "full_sheet"
                             },
                             onScanAgainClick = { _scannedEvent.value = null }
@@ -148,21 +162,23 @@ class MainActivity : ComponentActivity() {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
             if (pendingWriteData != null && tag != null) {
+                // ESCRITURA
                 val success = NfcManager.writeToTag(tag, pendingWriteData!!)
                 if (success) {
                     Toast.makeText(this, "¡Personaje vinculado exitosamente!", Toast.LENGTH_LONG).show()
                     pendingWriteData = null
                 } else {
-                    Toast.makeText(this, "Error al escribir en NFC.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Error al escribir.", Toast.LENGTH_SHORT).show()
                 }
             } else {
+                // LECTURA
                 val character = NfcManager.readFromIntent(intent)
                 if (character != null) {
-                    // Ahora ScanEvent está importado y funciona
+                    // Creamos un evento nuevo con timestamp actual
                     _scannedEvent.value = ScanEvent(character)
                     _navigateToRead.value = true
                 } else {
-                    Toast.makeText(this, "Formato NFC desconocido o vacío.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Formato NFC desconocido.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
