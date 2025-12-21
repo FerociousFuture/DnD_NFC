@@ -18,33 +18,37 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterSheetScreen(
-    characterId: String? = null, // Null = Nuevo personaje
+    characterId: String? = null,
     existingCharacter: PlayerCharacter? = null,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onWriteNfc: (PlayerCharacter) -> Unit // <--- Callback para ir a grabar
 ) {
     val scope = rememberCoroutineScope()
-
-    // Estado principal del personaje
-    var charData by remember {
-        mutableStateOf(existingCharacter ?: PlayerCharacter())
-    }
-
-    // Tabs
+    var charData by remember { mutableStateOf(existingCharacter ?: PlayerCharacter()) }
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("General", "Combate", "Equipo", "Bio")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (charData.name.isEmpty()) "Nuevo Personaje" else charData.name) },
+                title = { Text(if (charData.name.isEmpty()) "Nuevo" else charData.name) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") }
                 },
                 actions = {
+                    // BOTÓN NFC: Solo aparece si el personaje ya tiene ID (ya fue guardado)
+                    if (charData.id.isNotEmpty()) {
+                        IconButton(onClick = { onWriteNfc(charData) }) {
+                            Icon(Icons.Default.Nfc, contentDescription = "Vincular a Tarjeta")
+                        }
+                    }
+
                     IconButton(onClick = {
                         scope.launch {
-                            FirebaseService.saveCharacter(charData)
-                            onBack()
+                            val success = FirebaseService.saveCharacter(charData)
+                            if (success) {
+                                onBack()
+                            }
                         }
                     }) {
                         Icon(Icons.Default.Save, "Guardar")
@@ -59,7 +63,7 @@ fun CharacterSheetScreen(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
                         icon = {
-                            when(index) {
+                            when (index) {
                                 0 -> Icon(Icons.Default.Face, null)
                                 1 -> Icon(Icons.Default.Shield, null)
                                 2 -> Icon(Icons.Default.Backpack, null)
@@ -83,7 +87,7 @@ fun CharacterSheetScreen(
     }
 }
 
-// --- TABS ---
+// --- TABS Y COMPONENTES AUXILIARES ---
 
 @Composable
 fun GeneralTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
@@ -166,7 +170,6 @@ fun BioTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
     }
 }
 
-// --- UTILIDADES UI ---
 @Composable
 fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
