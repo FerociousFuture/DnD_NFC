@@ -1,5 +1,6 @@
 package com.example.dnd_nfc.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,7 +19,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.remote.FirebaseService
 import kotlinx.coroutines.launch
@@ -32,33 +32,66 @@ fun CharacterSheetScreen(
     onWriteNfc: (PlayerCharacter) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    // Estado del personaje (si es nuevo, empieza vacío)
     var charData by remember { mutableStateOf(existingCharacter ?: PlayerCharacter()) }
     var selectedTab by remember { mutableIntStateOf(0) }
+
     val tabs = listOf("General", "Combate", "Equipo", "Bio")
+
+    // --- LÓGICA DE VALIDACIÓN ---
+    // El botón guardar solo se activa si los campos obligatorios tienen texto
+    val isFormValid = remember(charData) {
+        charData.name.isNotBlank() &&
+                charData.charClass.isNotBlank() &&
+                charData.race.isNotBlank() &&
+                charData.background.isNotBlank()
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (charData.name.isEmpty()) "Nuevo Héroe" else charData.name) },
+                title = {
+                    Text(if (charData.name.isEmpty()) "Nuevo Héroe" else charData.name)
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Atrás")
+                    }
                 },
                 actions = {
-                    // Botón Vincular NFC (Solo si ya se guardó y tiene ID)
+                    // BOTÓN VINCULAR NFC
+                    // Solo visible si el personaje ya existe en la nube (tiene ID)
                     if (charData.id.isNotEmpty()) {
-                        IconButton(onClick = { onWriteNfc(charData) }) {
-                            Icon(Icons.Default.Nfc, contentDescription = "Vincular a Tarjeta")
+                        IconButton(
+                            onClick = { onWriteNfc(charData) },
+                            enabled = isFormValid // Bloqueado si faltan datos
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Nfc,
+                                contentDescription = "Vincular a Tarjeta",
+                                tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray
+                            )
                         }
                     }
 
-                    // Botón Guardar en Nube
-                    IconButton(onClick = {
-                        scope.launch {
-                            val success = FirebaseService.saveCharacter(charData)
-                            if (success) onBack()
-                        }
-                    }) {
-                        Icon(Icons.Default.Save, "Guardar")
+                    // BOTÓN GUARDAR (NUBE)
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                // Guardamos en Firebase
+                                val success = FirebaseService.saveCharacter(charData)
+                                if (success) {
+                                    onBack() // Volvemos a la lista si salió bien
+                                }
+                            }
+                        },
+                        enabled = isFormValid // Bloqueado si faltan datos
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = "Guardar",
+                            tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray
+                        )
                     }
                 }
             )
@@ -84,6 +117,18 @@ fun CharacterSheetScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
+
+            // MENSAJE DE ERROR (Si faltan datos)
+            if (!isFormValid) {
+                Text(
+                    text = "* Faltan datos obligatorios (Nombre, Clase, Raza, Trasfondo)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
+            // CONTENIDO DE LAS PESTAÑAS
             when (selectedTab) {
                 0 -> GeneralTab(charData) { charData = it }
                 1 -> CombatTab(charData) { charData = it }
@@ -94,21 +139,26 @@ fun CharacterSheetScreen(
     }
 }
 
-// --- PESTAÑA 1: GENERAL (Con Dropdowns y Steppers) ---
+// ==========================================
+//               PESTAÑA 1: GENERAL
+// ==========================================
 @Composable
 fun GeneralTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
     val scrollState = rememberScrollState()
 
-    // Listas de datos
+    // Listas para los menús desplegables
     val classList = listOf("Bárbaro", "Bardo", "Brujo", "Clérigo", "Druida", "Explorador", "Guerrero", "Hechicero", "Mago", "Monje", "Paladín", "Pícaro", "Artífice")
     val raceList = listOf("Dracónido", "Enano", "Elfo", "Gnomo", "Humano", "Mediano", "Semielfo", "SemiOrco", "Tiflin", "Aasimar", "Goliat", "Orco")
     val levelList = (1..20).map { it.toString() }
 
-    Column(modifier = Modifier.verticalScroll(scrollState), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(
+        modifier = Modifier.verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
 
         SectionTitle("Identidad")
 
-        // Nombre (Texto Libre)
+        // NOMBRE (Texto Libre)
         OutlinedTextField(
             value = char.name,
             onValueChange = { onUpdate(char.copy(name = it)) },
@@ -118,13 +168,13 @@ fun GeneralTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
             keyboardOptions = KeyboardOptions.Default.copy(capitalization = KeyboardCapitalization.Sentences)
         )
 
-        // Fila 1: Clase y Nivel (Dropdowns)
+        // CLASE Y NIVEL (Dropdowns)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(modifier = Modifier.weight(1.5f)) {
                 DnDDropdown(
                     label = "Clase",
                     options = classList,
-                    selected = char.charClass.ifEmpty { classList[0] },
+                    selected = char.charClass,
                     onSelectionChanged = { onUpdate(char.copy(charClass = it)) }
                 )
             }
@@ -138,41 +188,46 @@ fun GeneralTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
             }
         }
 
-        // Fila 2: Raza y Trasfondo
+        // RAZA Y TRASFONDO
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(modifier = Modifier.weight(1f)) {
                 DnDDropdown(
                     label = "Raza",
                     options = raceList,
-                    selected = char.race.ifEmpty { raceList[4] }, // Humano por defecto
+                    selected = char.race,
                     onSelectionChanged = { onUpdate(char.copy(race = it)) }
                 )
             }
-            // Trasfondo sigue siendo texto porque hay infinitos
+            // Trasfondo sigue siendo libre
             OutlinedTextField(
                 value = char.background,
                 onValueChange = { onUpdate(char.copy(background = it)) },
                 label = { Text("Trasfondo") },
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions.Default.copy(capitalization = KeyboardCapitalization.Sentences)
             )
         }
 
-        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
         SectionTitle("Estadísticas Base")
 
-        // Atributos con Botones +/-
+        // ESTADÍSTICAS CON STEPPERS (+/-)
         StatStepperRow("Fuerza (FUE)", char.str) { onUpdate(char.copy(str = it)) }
         StatStepperRow("Destreza (DES)", char.dex) { onUpdate(char.copy(dex = it)) }
         StatStepperRow("Constitución (CON)", char.con) { onUpdate(char.copy(con = it)) }
         StatStepperRow("Inteligencia (INT)", char.int) { onUpdate(char.copy(int = it)) }
         StatStepperRow("Sabiduría (SAB)", char.wis) { onUpdate(char.copy(wis = it)) }
         StatStepperRow("Carisma (CAR)", char.cha) { onUpdate(char.copy(cha = it)) }
+
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
-// --- COMPONENTES UI PERSONALIZADOS ---
+// ==========================================
+//               COMPONENTES UI
+// ==========================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,13 +238,15 @@ fun DnDDropdown(
     onSelectionChanged: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // Texto a mostrar: si está vacío mostramos el primero o placeholder
+    val displayText = if (selected.isEmpty()) "Seleccionar" else selected
 
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
-            value = selected,
+            value = displayText,
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
@@ -223,48 +280,52 @@ fun StatStepperRow(
     value: Int,
     onValueChange: (Int) -> Unit
 ) {
+    // Calculamos modificador: (Valor - 10) / 2
     val mod = (value - 10) / 2
     val modStr = if (mod >= 0) "+$mod" else "$mod"
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Nombre y Modificador
+            // Label y Modificador
             Column(modifier = Modifier.weight(1f)) {
-                Text(label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text(label, fontWeight = FontWeight.Bold)
                 Text(
                     "Modificador: $modStr",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = if (mod >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                 )
             }
 
-            // Controles
+            // Botones
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Menos
                 IconButton(
                     onClick = { if (value > 1) onValueChange(value - 1) },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).size(36.dp)
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)).size(32.dp)
                 ) {
                     Icon(Icons.Default.Remove, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
+                // Valor
                 Text(
                     text = "$value",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.width(50.dp),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.width(48.dp),
                     textAlign = TextAlign.Center
                 )
 
+                // Más
                 IconButton(
                     onClick = { if (value < 30) onValueChange(value + 1) },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(8.dp)).size(36.dp)
+                    modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(8.dp)).size(32.dp)
                 ) {
                     Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
@@ -273,16 +334,46 @@ fun StatStepperRow(
     }
 }
 
-// --- OTRAS PESTAÑAS (Mantienen la funcionalidad pero con estilo consistente) ---
+@Composable
+fun SectionTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(vertical = 4.dp)
+    )
+}
+
+// ==========================================
+//           OTRAS PESTAÑAS (SIMPLES)
+// ==========================================
 
 @Composable
 fun CombatTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("Combate")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = "${char.ac}", onValueChange = { onUpdate(char.copy(ac = it.toIntOrNull() ?: 10)) }, label = { Text("CA") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-            OutlinedTextField(value = "${char.hpCurrent}", onValueChange = { onUpdate(char.copy(hpCurrent = it.toIntOrNull() ?: 0)) }, label = { Text("HP Actual") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-            OutlinedTextField(value = "${char.hpMax}", onValueChange = { onUpdate(char.copy(hpMax = it.toIntOrNull() ?: 0)) }, label = { Text("HP Max") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            OutlinedTextField(
+                value = "${char.ac}",
+                onValueChange = { onUpdate(char.copy(ac = it.toIntOrNull() ?: 10)) },
+                label = { Text("CA") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            OutlinedTextField(
+                value = "${char.hpCurrent}",
+                onValueChange = { onUpdate(char.copy(hpCurrent = it.toIntOrNull() ?: 0)) },
+                label = { Text("HP Actual") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            OutlinedTextField(
+                value = "${char.hpMax}",
+                onValueChange = { onUpdate(char.copy(hpMax = it.toIntOrNull() ?: 0)) },
+                label = { Text("HP Max") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
         }
 
         SectionTitle("Ataques y Conjuros")
@@ -325,9 +416,4 @@ fun BioTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
             modifier = Modifier.fillMaxWidth().height(200.dp)
         )
     }
-}
-
-@Composable
-fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 4.dp))
 }

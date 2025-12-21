@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.*
 import com.example.dnd_nfc.data.model.CharacterSheet
 import com.example.dnd_nfc.data.model.PlayerCharacter
+import com.example.dnd_nfc.data.model.ScanEvent // <--- IMPORTANTE: Ahora importamos ScanEvent
 import com.example.dnd_nfc.data.remote.GoogleAuthClient
 import com.example.dnd_nfc.nfc.NfcManager
 import com.example.dnd_nfc.ui.screens.*
@@ -22,14 +23,11 @@ import com.google.firebase.ktx.Firebase
 class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
-    // Variable para guardar los datos pendientes de escribir en NFC (CSV)
     private var pendingWriteData: String? = null
     private lateinit var googleAuthClient: GoogleAuthClient
 
-    // Estado para datos leídos del NFC (Formato ligero)
-    private val _scannedNfcData = mutableStateOf<CharacterSheet?>(null)
-
-    // Control de navegación externa
+    // Usamos ScanEvent para asegurar que cada lectura sea única
+    private val _scannedEvent = mutableStateOf<ScanEvent?>(null)
     private val _navigateToRead = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,14 +40,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             DnD_NFCTheme {
                 var currentScreen by remember { mutableStateOf(startDestination) }
-                val scannedNfcChar by _scannedNfcData
+                val scanEvent by _scannedEvent
 
-                // Personaje completo seleccionado (para ver/editar en la hoja)
                 var selectedFullCharacter by remember { mutableStateOf<PlayerCharacter?>(null) }
-                // Personaje que queremos grabar en una tarjeta
                 var charToWriteToNfc by remember { mutableStateOf<PlayerCharacter?>(null) }
 
-                // Navegación automática al escanear
                 val shouldNavigate by _navigateToRead
                 LaunchedEffect(shouldNavigate) {
                     if (shouldNavigate && currentScreen != "read") {
@@ -67,21 +62,19 @@ class MainActivity : ComponentActivity() {
                         onSignOutClick = {
                             googleAuthClient.signOut()
                             currentScreen = "auth"
-                            _scannedNfcData.value = null
+                            _scannedEvent.value = null
                         }
                     )
 
                     "read" -> {
                         BackHandler { currentScreen = "menu" }
-                        // Usamos la nueva versión de NfcReadScreen que descarga de la nube
                         NfcReadScreen(
-                            nfcCharacter = scannedNfcChar,
+                            scanEvent = scanEvent,
                             onFullCharacterLoaded = { fullChar ->
-                                // ¡Éxito! Del NFC pasamos directo a la hoja completa
                                 selectedFullCharacter = fullChar
                                 currentScreen = "full_sheet"
                             },
-                            onScanAgainClick = { _scannedNfcData.value = null }
+                            onScanAgainClick = { _scannedEvent.value = null }
                         )
                     }
 
@@ -93,20 +86,18 @@ class MainActivity : ComponentActivity() {
                                 currentScreen = "full_sheet"
                             },
                             onNewCharacterClick = {
-                                selectedFullCharacter = null // Crear nuevo
+                                selectedFullCharacter = null
                                 currentScreen = "full_sheet"
                             }
                         )
                     }
 
                     "full_sheet" -> {
-                        // Al salir de la hoja, volvemos a la biblioteca
                         BackHandler { currentScreen = "library" }
                         CharacterSheetScreen(
                             existingCharacter = selectedFullCharacter,
                             onBack = { currentScreen = "library" },
                             onWriteNfc = { char ->
-                                // Aquí iniciamos el proceso de grabación en tarjeta física
                                 charToWriteToNfc = char
                                 currentScreen = "write"
                             }
@@ -128,7 +119,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // ELIMINADO: case "edit" -> NfcEditScreen... (Ya no existe)
+                    else -> { currentScreen = "menu" }
                 }
             }
         }
@@ -157,7 +148,6 @@ class MainActivity : ComponentActivity() {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
             if (pendingWriteData != null && tag != null) {
-                // MODO ESCRITURA
                 val success = NfcManager.writeToTag(tag, pendingWriteData!!)
                 if (success) {
                     Toast.makeText(this, "¡Personaje vinculado exitosamente!", Toast.LENGTH_LONG).show()
@@ -166,11 +156,10 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "Error al escribir en NFC.", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // MODO LECTURA
                 val character = NfcManager.readFromIntent(intent)
                 if (character != null) {
-                    _scannedNfcData.value = character
-                    // Forzamos navegación al lector para que procese el ID
+                    // Ahora ScanEvent está importado y funciona
+                    _scannedEvent.value = ScanEvent(character)
                     _navigateToRead.value = true
                 } else {
                     Toast.makeText(this, "Formato NFC desconocido o vacío.", Toast.LENGTH_SHORT).show()

@@ -1,11 +1,11 @@
 package com.example.dnd_nfc.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.remote.FirebaseService
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,11 +24,19 @@ fun CharacterListScreen(
 ) {
     var characters by remember { mutableStateOf<List<PlayerCharacter>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
-    // Cargar personajes al inicio
+    // Función para recargar la lista
+    fun loadCharacters() {
+        scope.launch {
+            isLoading = true
+            characters = FirebaseService.getUserCharacters()
+            isLoading = false
+        }
+    }
+
     LaunchedEffect(Unit) {
-        characters = FirebaseService.getUserCharacters()
-        isLoading = false
+        loadCharacters()
     }
 
     Scaffold(
@@ -55,7 +64,18 @@ fun CharacterListScreen(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(characters) { char ->
-                        CharacterCard(char) { onCharacterClick(char) }
+                        CharacterCard(
+                            character = char,
+                            onClick = { onCharacterClick(char) },
+                            onDelete = {
+                                scope.launch {
+                                    val success = FirebaseService.deleteCharacter(char.id)
+                                    if (success) {
+                                        loadCharacters() // Recargamos la lista
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -64,18 +84,33 @@ fun CharacterListScreen(
 }
 
 @Composable
-fun CharacterCard(character: PlayerCharacter, onClick: () -> Unit) {
+fun CharacterCard(
+    character: PlayerCharacter,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Person, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(character.name.ifEmpty { "Sin Nombre" }, style = MaterialTheme.typography.titleMedium)
-                Text("Nivel ${character.level} - ${character.race} ${character.charClass}", style = MaterialTheme.typography.bodyMedium)
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Default.Person, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(character.name.ifEmpty { "Sin Nombre" }, style = MaterialTheme.typography.titleMedium)
+                    Text("Nivel ${character.level} - ${character.race} ${character.charClass}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            // Botón de Borrar
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Borrar", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
