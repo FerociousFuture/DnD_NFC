@@ -6,37 +6,43 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.example.dnd_nfc.data.model.ScanEvent // <--- AHORA SÍ LO IMPORTAMOS
+import com.example.dnd_nfc.data.local.CharacterManager // <--- Importante
 import com.example.dnd_nfc.data.model.PlayerCharacter
+import com.example.dnd_nfc.data.model.ScanEvent
 
 @Composable
 fun NfcReadScreen(
-    scanEvent: ScanEvent?, // <--- CAMBIO CLAVE: Recibimos el evento, no el character directo
+    scanEvent: ScanEvent?,
     onFullCharacterLoaded: (PlayerCharacter) -> Unit,
     onScanAgainClick: () -> Unit
 ) {
-    var isLoadingCloud by remember { mutableStateOf(false) }
-    var cloudError by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // Extraemos el personaje del evento
+    // Extraemos los datos básicos de la tarjeta
     val nfcCharacter = scanEvent?.character
 
-    // EFECTO: Se dispara cada vez que scanEvent cambia (incluso si es la misma tarjeta)
+    // Cuando se detecta una tarjeta, buscamos la ficha completa en el móvil
     LaunchedEffect(scanEvent) {
         if (nfcCharacter != null && nfcCharacter.id.isNotEmpty()) {
-            isLoadingCloud = true
-            cloudError = null
+            isLoading = true
+            errorMsg = null
 
-            val fullChar = FirebaseService.getCharacterById(nfcCharacter.id)
+            // BUSQUEDA LOCAL
+            val fullChar = CharacterManager.getCharacterById(context, nfcCharacter.id)
 
             if (fullChar != null) {
+                // ¡Encontrado! Navegamos a la ficha
                 onFullCharacterLoaded(fullChar)
             } else {
-                cloudError = "Error: Personaje no encontrado en la nube."
+                // El ID está en la tarjeta, pero no tenemos el archivo en este móvil
+                errorMsg = "Personaje no encontrado en este dispositivo.\nID: ${nfcCharacter.id}"
             }
-            isLoadingCloud = false
+            isLoading = false
         }
     }
 
@@ -54,12 +60,12 @@ fun NfcReadScreen(
                     tint = MaterialTheme.colorScheme.secondary
                 )
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("Acerca una miniatura...", style = MaterialTheme.typography.headlineSmall)
+                Text("Acerca una tarjeta...", style = MaterialTheme.typography.headlineSmall)
                 Spacer(modifier = Modifier.height(16.dp))
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
             }
         } else {
-            // ESTADO 2: LECTURA EXITOSA
+            // ESTADO 2: LECTURA EXITOSA (O ERROR)
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -75,22 +81,18 @@ fun NfcReadScreen(
                         Text(nfcCharacter.n, style = MaterialTheme.typography.headlineMedium)
                         Text("ID: ${nfcCharacter.id}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        Text("Stats (Preview): ${nfcCharacter.s}", style = MaterialTheme.typography.bodyMedium)
+                        Text("Stats: ${nfcCharacter.s}", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                if (isLoadingCloud) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("Sincronizando ficha completa...")
-                    }
-                } else if (cloudError != null) {
-                    Text(cloudError!!, color = MaterialTheme.colorScheme.error)
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                } else if (errorMsg != null) {
+                    Text(errorMsg!!, color = MaterialTheme.colorScheme.error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = onScanAgainClick) { Text("Intentar otra etiqueta") }
+                    Button(onClick = onScanAgainClick) { Text("Escanear otra vez") }
                 }
             }
         }
