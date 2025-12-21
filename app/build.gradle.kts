@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.gms.google-services")
+    // ELIMINADO: id("com.google.gms.google-services")
 }
 
 android {
@@ -41,7 +41,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -50,6 +49,13 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+
+    // Iconos extendidos
+    implementation("androidx.compose.material:material-icons-extended:1.6.0")
+
+    // GSON (Para guardar datos en local fácilmente)
+    implementation("com.google.code.gson:gson:2.10.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -57,23 +63,23 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    // FIREBASE
-    // Usamos solo UNA versión del BOM (la más reciente que tenías)
-    implementation(platform("com.google.firebase:firebase-bom:33.1.0")) // O la 34.7.0 si está disponible
 
-    // Librerías de Firebase (sin poner versión, el BOM la gestiona)
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-auth-ktx")
+    // ... otras librerías que ya tienes ...
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
 
-    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    // --- ESTA ES LA QUE FALTA ---
+    implementation("androidx.navigation:navigation-compose:2.8.5")
 
-    // Iconos extendidos para la UI (opcional, para botones bonitos)
+    // UI y Material
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+
+    // Iconos y Gson (que agregamos antes)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
-
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
-    implementation("androidx.credentials:credentials:1.3.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
-
-
+    implementation("com.google.code.gson:gson:2.10.1")
 }

@@ -19,18 +19,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.dnd_nfc.data.local.CharacterManager
 import com.example.dnd_nfc.data.model.Attack
 import com.example.dnd_nfc.data.model.InventoryItem
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.Spell
-import com.example.dnd_nfc.data.remote.FirebaseService
-import kotlinx.coroutines.launch
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,13 +41,13 @@ fun CharacterSheetScreen(
     onBack: () -> Unit,
     onWriteNfc: (PlayerCharacter) -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var charData by remember { mutableStateOf(existingCharacter ?: PlayerCharacter()) }
+    val context = LocalContext.current
+    // Si no existe, creamos uno nuevo. Si existe, usamos el pasado por parámetro.
+    var charData by remember { mutableStateOf(existingCharacter ?: PlayerCharacter(id = UUID.randomUUID().toString())) }
     var selectedTab by remember { mutableIntStateOf(0) }
 
     // Estados para control de flujo
     var showSaveDialog by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) } // Previene doble clic y muestra carga
 
     val tabs = listOf("General", "Combate", "Magia", "Equipo", "Rasgos")
     val icons = listOf(
@@ -57,47 +58,25 @@ fun CharacterSheetScreen(
         Icons.Default.Description
     )
 
-    // --- VALIDACIÓN OBLIGATORIA ---
-    // El usuario NO puede guardar ni usar NFC si faltan estos datos clave
-    val isFormValid = charData.name.isNotBlank() &&
-            charData.charClass.isNotBlank() &&
-            charData.race.isNotBlank()
+    // Validación mínima para permitir guardar/vincular
+    val isFormValid = charData.name.isNotBlank() && charData.charClass.isNotBlank()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (charData.name.isEmpty()) "Nuevo Personaje" else charData.name) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, enabled = !isSaving) {
-                        Icon(Icons.Default.ArrowBack, "Atrás")
-                    }
+                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") }
                 },
                 actions = {
-                    // Si está guardando, mostramos un circulito de carga
-                    if (isSaving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp).padding(end = 16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else {
-                        // Botón NFC (Solo si ya tiene ID guardado y datos válidos)
-                        if (charData.id.isNotEmpty()) {
-                            IconButton(
-                                onClick = { onWriteNfc(charData) },
-                                enabled = isFormValid
-                            ) {
-                                Icon(Icons.Default.Nfc, "Vincular", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
-                            }
-                        }
+                    // Botón NFC
+                    IconButton(onClick = { onWriteNfc(charData) }, enabled = isFormValid) {
+                        Icon(Icons.Default.Nfc, "Vincular", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
+                    }
 
-                        // Botón Guardar Nube (Abre el diálogo)
-                        IconButton(
-                            onClick = { showSaveDialog = true },
-                            enabled = isFormValid
-                        ) {
-                            Icon(Icons.Default.Save, "Guardar", tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray)
-                        }
+                    // Botón Guardar (LOCAL)
+                    IconButton(onClick = { showSaveDialog = true }, enabled = isFormValid) {
+                        Icon(Icons.Default.Save, "Guardar", tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray)
                     }
                 }
             )
@@ -108,7 +87,6 @@ fun CharacterSheetScreen(
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        enabled = !isSaving, // Bloqueamos tabs al guardar
                         icon = { Icon(icons[index], contentDescription = title) },
                         label = { Text(title, fontSize = 10.sp) }
                     )
@@ -118,10 +96,9 @@ fun CharacterSheetScreen(
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
 
-            // Mensaje de error sutil si faltan datos
             if (!isFormValid) {
                 Text(
-                    text = "* Faltan datos obligatorios: Nombre, Clase o Especie",
+                    text = "* Faltan datos obligatorios: Nombre y Clase",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -138,30 +115,23 @@ fun CharacterSheetScreen(
         }
     }
 
-    // --- DIÁLOGO DE CONFIRMACIÓN DE GUARDADO ---
+    // --- DIÁLOGO DE CONFIRMACIÓN DE GUARDADO (LOCAL) ---
     if (showSaveDialog) {
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
             icon = { Icon(Icons.Default.Save, null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text("¿Guardar Personaje?") },
             text = {
-                Column {
-                    Text("Se actualizarán los datos de \"${charData.name}\" en la nube.")
-                    Spacer(Modifier.height(8.dp))
-                    Text("Asegúrate de que los cambios son correctos.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                }
+                Text("Los datos se guardarán en la memoria de este dispositivo.")
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showSaveDialog = false
-                        isSaving = true // Bloqueamos la UI
-                        scope.launch {
-                            val success = FirebaseService.saveCharacter(charData)
-                            isSaving = false // Desbloqueamos
-                            if (success) {
-                                onBack() // Volvemos si salió bien
-                            }
+                        // Guardado Local usando CharacterManager
+                        val success = CharacterManager.saveCharacter(context, charData)
+                        if (success) {
+                            onBack() // Volvemos a la lista si se guardó bien
                         }
                     }
                 ) {
@@ -178,20 +148,20 @@ fun CharacterSheetScreen(
 }
 
 // ==========================================
-// PESTAÑA 1: GENERAL (Datos, Stats, Skills)
+// PESTAÑA 1: GENERAL
 // ==========================================
 @Composable
 fun GeneralTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
-        SectionTitle("Identidad (Obligatorio)")
+        SectionTitle("Identidad")
         OutlinedTextField(
             value = char.name,
             onValueChange = { onUpdate(char.copy(name = it)) },
             label = { Text("Nombre*") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            isError = char.name.isBlank(), // Marca rojo si está vacío
+            isError = char.name.isBlank(),
             keyboardOptions = KeyboardOptions.Default.copy(capitalization = KeyboardCapitalization.Sentences)
         )
 
@@ -207,13 +177,7 @@ fun GeneralTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = char.race,
-                onValueChange = { onUpdate(char.copy(race = it)) },
-                label = { Text("Especie*") },
-                isError = char.race.isBlank(),
-                modifier = Modifier.weight(1f)
-            )
+            OutlinedTextField(value = char.race, onValueChange = { onUpdate(char.copy(race = it)) }, label = { Text("Especie") }, modifier = Modifier.weight(1f))
             OutlinedTextField(value = char.subclass, onValueChange = { onUpdate(char.copy(subclass = it)) }, label = { Text("Subclase") }, modifier = Modifier.weight(1f))
         }
 
@@ -329,7 +293,7 @@ fun CombatTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
 }
 
 // ==========================================
-// PESTAÑA 3: MAGIA (D&D 2024 - DASHBOARD)
+// PESTAÑA 3: MAGIA (DISEÑO DASHBOARD)
 // ==========================================
 @Composable
 fun MagicTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {

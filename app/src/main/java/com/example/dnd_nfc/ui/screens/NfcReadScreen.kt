@@ -10,7 +10,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.dnd_nfc.data.model.ScanEvent // <--- AHORA SÍ LO IMPORTAMOS
 import com.example.dnd_nfc.data.model.PlayerCharacter
-import com.example.dnd_nfc.data.remote.FirebaseService
 
 @Composable
 fun NfcReadScreen(

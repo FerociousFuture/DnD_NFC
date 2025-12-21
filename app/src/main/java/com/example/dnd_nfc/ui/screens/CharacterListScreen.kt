@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.dnd_nfc.data.model.PlayerCharacter
-import com.example.dnd_nfc.data.remote.FirebaseService
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
