@@ -1,5 +1,6 @@
 package com.example.dnd_nfc.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,31 +44,60 @@ fun CharacterSheetScreen(
     var charData by remember { mutableStateOf(existingCharacter ?: PlayerCharacter()) }
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val tabs = listOf("General", "Combate", "Magia", "Equipo", "Rasgos")
-    val icons = listOf(Icons.Default.Face, Icons.Default.Shield, Icons.Default.AutoStories, Icons.Default.Backpack, Icons.Default.Description)
+    // Estados para control de flujo
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) } // Previene doble clic y muestra carga
 
-    // Validación mínima
-    val isFormValid = charData.name.isNotBlank() && charData.charClass.isNotBlank()
+    val tabs = listOf("General", "Combate", "Magia", "Equipo", "Rasgos")
+    val icons = listOf(
+        Icons.Default.Face,
+        Icons.Default.Shield,
+        Icons.Default.AutoStories,
+        Icons.Default.Backpack,
+        Icons.Default.Description
+    )
+
+    // --- VALIDACIÓN OBLIGATORIA ---
+    // El usuario NO puede guardar ni usar NFC si faltan estos datos clave
+    val isFormValid = charData.name.isNotBlank() &&
+            charData.charClass.isNotBlank() &&
+            charData.race.isNotBlank()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (charData.name.isEmpty()) "Nuevo Personaje" else charData.name) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") }
+                    IconButton(onClick = onBack, enabled = !isSaving) {
+                        Icon(Icons.Default.ArrowBack, "Atrás")
+                    }
                 },
                 actions = {
-                    if (charData.id.isNotEmpty()) {
-                        IconButton(onClick = { onWriteNfc(charData) }, enabled = isFormValid) {
-                            Icon(Icons.Default.Nfc, "Vincular", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
+                    // Si está guardando, mostramos un circulito de carga
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp).padding(end = 16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        // Botón NFC (Solo si ya tiene ID guardado y datos válidos)
+                        if (charData.id.isNotEmpty()) {
+                            IconButton(
+                                onClick = { onWriteNfc(charData) },
+                                enabled = isFormValid
+                            ) {
+                                Icon(Icons.Default.Nfc, "Vincular", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
+                            }
                         }
-                    }
-                    IconButton(onClick = {
-                        scope.launch {
-                            if (FirebaseService.saveCharacter(charData)) onBack()
+
+                        // Botón Guardar Nube (Abre el diálogo)
+                        IconButton(
+                            onClick = { showSaveDialog = true },
+                            enabled = isFormValid
+                        ) {
+                            Icon(Icons.Default.Save, "Guardar", tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray)
                         }
-                    }, enabled = isFormValid) {
-                        Icon(Icons.Default.Save, "Guardar", tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray)
                     }
                 }
             )
@@ -78,6 +108,7 @@ fun CharacterSheetScreen(
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
+                        enabled = !isSaving, // Bloqueamos tabs al guardar
                         icon = { Icon(icons[index], contentDescription = title) },
                         label = { Text(title, fontSize = 10.sp) }
                     )
@@ -86,6 +117,17 @@ fun CharacterSheetScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
+
+            // Mensaje de error sutil si faltan datos
+            if (!isFormValid) {
+                Text(
+                    text = "* Faltan datos obligatorios: Nombre, Clase o Especie",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
             when (selectedTab) {
                 0 -> GeneralTab(charData) { charData = it }
                 1 -> CombatTab(charData) { charData = it }
@@ -94,6 +136,44 @@ fun CharacterSheetScreen(
                 4 -> FeaturesTab(charData) { charData = it }
             }
         }
+    }
+
+    // --- DIÁLOGO DE CONFIRMACIÓN DE GUARDADO ---
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            icon = { Icon(Icons.Default.Save, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("¿Guardar Personaje?") },
+            text = {
+                Column {
+                    Text("Se actualizarán los datos de \"${charData.name}\" en la nube.")
+                    Spacer(Modifier.height(8.dp))
+                    Text("Asegúrate de que los cambios son correctos.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSaveDialog = false
+                        isSaving = true // Bloqueamos la UI
+                        scope.launch {
+                            val success = FirebaseService.saveCharacter(charData)
+                            isSaving = false // Desbloqueamos
+                            if (success) {
+                                onBack() // Volvemos si salió bien
+                            }
+                        }
+                    }
+                ) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
 
@@ -104,88 +184,64 @@ fun CharacterSheetScreen(
 fun GeneralTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
     Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
-        SectionTitle("Identidad")
+        SectionTitle("Identidad (Obligatorio)")
         OutlinedTextField(
             value = char.name,
             onValueChange = { onUpdate(char.copy(name = it)) },
-            label = { Text("Nombre") },
+            label = { Text("Nombre*") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            isError = char.name.isBlank(), // Marca rojo si está vacío
             keyboardOptions = KeyboardOptions.Default.copy(capitalization = KeyboardCapitalization.Sentences)
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = char.charClass, onValueChange = { onUpdate(char.copy(charClass = it)) }, label = { Text("Clase") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                value = char.charClass,
+                onValueChange = { onUpdate(char.copy(charClass = it)) },
+                label = { Text("Clase*") },
+                isError = char.charClass.isBlank(),
+                modifier = Modifier.weight(1f)
+            )
             OutlinedTextField(value = "${char.level}", onValueChange = { onUpdate(char.copy(level = it.toIntOrNull() ?: 1)) }, label = { Text("Nivel") }, modifier = Modifier.weight(0.5f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = char.race, onValueChange = { onUpdate(char.copy(race = it)) }, label = { Text("Especie") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                value = char.race,
+                onValueChange = { onUpdate(char.copy(race = it)) },
+                label = { Text("Especie*") },
+                isError = char.race.isBlank(),
+                modifier = Modifier.weight(1f)
+            )
             OutlinedTextField(value = char.subclass, onValueChange = { onUpdate(char.copy(subclass = it)) }, label = { Text("Subclase") }, modifier = Modifier.weight(1f))
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value = char.background, onValueChange = { onUpdate(char.copy(background = it)) }, label = { Text("Trasfondo") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(value = char.size, onValueChange = { onUpdate(char.copy(size = it)) }, label = { Text("Tamaño") }, modifier = Modifier.weight(0.5f))
             OutlinedTextField(value = char.xp, onValueChange = { onUpdate(char.copy(xp = it)) }, label = { Text("XP") }, modifier = Modifier.weight(0.5f))
         }
 
-        OutlinedTextField(value = char.size, onValueChange = { onUpdate(char.copy(size = it)) }, label = { Text("Tamaño") }, modifier = Modifier.fillMaxWidth())
-
         Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-        // --- ATRIBUTOS & HABILIDADES ---
-        SectionTitle("Atributos & Habilidades")
-
-        StatBlock("FUERZA", char.str, { onUpdate(char.copy(str = it)) }, char, onUpdate, listOf("Atletismo"))
-        StatBlock("DESTREZA", char.dex, { onUpdate(char.copy(dex = it)) }, char, onUpdate, listOf("Acrobacias", "Juego de Manos", "Sigilo"))
-        StatBlock("CONSTITUCIÓN", char.con, { onUpdate(char.copy(con = it)) }, char, onUpdate, listOf())
-        StatBlock("INTELIGENCIA", char.int, { onUpdate(char.copy(int = it)) }, char, onUpdate, listOf("C. Arcano", "Historia", "Investigación", "Naturaleza", "Religión"))
-        StatBlock("SABIDURÍA", char.wis, { onUpdate(char.copy(wis = it)) }, char, onUpdate, listOf("T. con Animales", "Medicina", "Percepción", "Perspicacia", "Supervivencia"))
-        StatBlock("CARISMA", char.cha, { onUpdate(char.copy(cha = it)) }, char, onUpdate, listOf("Engaño", "Interpretación", "Intimidación", "Persuasión"))
-
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Percepción Pasiva: ", fontWeight = FontWeight.Bold)
-            CompactInput("", char.passivePerception) { onUpdate(char.copy(passivePerception = it)) }
-        }
-    }
-}
-
-// ==========================================
-// PESTAÑA 2: COMBATE (Defensas, HP, Ataques)
-// ==========================================
-@Composable
-fun CombatTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
-    var showAddAttackDialog by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
-        SectionTitle("Estado de Combate")
+        // --- ESTADÍSTICAS VITALES ---
+        SectionTitle("Estado Vital")
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CompactInput("CA", char.ac) { onUpdate(char.copy(ac = it)) }
             CompactInput("Inic.", char.initiative) { onUpdate(char.copy(initiative = it)) }
             CompactInput("Vel.", char.speed) { onUpdate(char.copy(speed = it)) }
-            CompactInput("Bono Comp.", char.proficiencyBonus) { onUpdate(char.copy(proficiencyBonus = it)) }
+            CompactInput("Perc.Pas", char.passivePerception) { onUpdate(char.copy(passivePerception = it)) }
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = char.inspiration, onCheckedChange = { onUpdate(char.copy(inspiration = it)) })
-            Text("Inspiración Heroica")
-        }
-
-        Divider()
-
-        // HP
-        SectionTitle("Puntos de Golpe")
-        Row {
-            OutlinedTextField(value = "${char.hpCurrent}", onValueChange = { onUpdate(char.copy(hpCurrent = it.toIntOrNull() ?: 0)) }, label = { Text("Actuales") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            OutlinedTextField(value = "${char.hpCurrent}", onValueChange = { onUpdate(char.copy(hpCurrent = it.toIntOrNull() ?: 0)) }, label = { Text("HP Actual") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             Spacer(Modifier.width(8.dp))
-            OutlinedTextField(value = "${char.hpMax}", onValueChange = { onUpdate(char.copy(hpMax = it.toIntOrNull() ?: 0)) }, label = { Text("Máximo") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            OutlinedTextField(value = "${char.hpMax}", onValueChange = { onUpdate(char.copy(hpMax = it.toIntOrNull() ?: 0)) }, label = { Text("HP Max") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             Spacer(Modifier.width(8.dp))
             OutlinedTextField(value = "${char.tempHp}", onValueChange = { onUpdate(char.copy(tempHp = it.toIntOrNull() ?: 0)) }, label = { Text("Temp") }, modifier = Modifier.weight(0.7f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
         }
 
-        // Dados de Golpe y Salvaciones
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(value = char.hitDiceTotal, onValueChange = { onUpdate(char.copy(hitDiceTotal = it)) }, label = { Text("Dados Golpe") }, modifier = Modifier.weight(0.8f))
             Spacer(Modifier.width(12.dp))
@@ -202,9 +258,46 @@ fun CombatTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
             }
         }
 
+        Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // --- ATRIBUTOS ---
+        SectionTitle("Atributos & Habilidades")
+
+        StatBlock("FUERZA", char.str, { onUpdate(char.copy(str = it)) }, char, onUpdate, listOf("Atletismo"))
+        StatBlock("DESTREZA", char.dex, { onUpdate(char.copy(dex = it)) }, char, onUpdate, listOf("Acrobacias", "Juego de Manos", "Sigilo"))
+        StatBlock("CONSTITUCIÓN", char.con, { onUpdate(char.copy(con = it)) }, char, onUpdate, listOf())
+        StatBlock("INTELIGENCIA", char.int, { onUpdate(char.copy(int = it)) }, char, onUpdate, listOf("C. Arcano", "Historia", "Investigación", "Naturaleza", "Religión"))
+        StatBlock("SABIDURÍA", char.wis, { onUpdate(char.copy(wis = it)) }, char, onUpdate, listOf("T. con Animales", "Medicina", "Percepción", "Perspicacia", "Supervivencia"))
+        StatBlock("CARISMA", char.cha, { onUpdate(char.copy(cha = it)) }, char, onUpdate, listOf("Engaño", "Interpretación", "Intimidación", "Persuasión"))
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+// ==========================================
+// PESTAÑA 2: COMBATE
+// ==========================================
+@Composable
+fun CombatTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
+    var showAddAttackDialog by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+        SectionTitle("Resumen de Combate")
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            CompactInput("CA", char.ac) { onUpdate(char.copy(ac = it)) }
+            CompactInput("Inic.", char.initiative) { onUpdate(char.copy(initiative = it)) }
+            CompactInput("Vel.", char.speed) { onUpdate(char.copy(speed = it)) }
+            CompactInput("Bono Comp.", char.proficiencyBonus) { onUpdate(char.copy(proficiencyBonus = it)) }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = char.inspiration, onCheckedChange = { onUpdate(char.copy(inspiration = it)) })
+            Text("Inspiración Heroica")
+        }
+
         Divider()
 
-        // --- LISTA DE ATAQUES ---
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             SectionTitle("Ataques y Conjuros")
             IconButton(onClick = { showAddAttackDialog = true }) {
@@ -236,51 +329,42 @@ fun CombatTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
 }
 
 // ==========================================
-// PESTAÑA 3: MAGIA (D&D 2024)
+// PESTAÑA 3: MAGIA (D&D 2024 - DASHBOARD)
 // ==========================================
 @Composable
 fun MagicTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
     var showAddSpellDialog by remember { mutableStateOf(false) }
+    val spellsByLevel = char.spells.groupBy { it.level }
 
-    Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 1. CABECERA VISUAL
+        MagicStatsHeader(char, onUpdate)
 
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-            Column(Modifier.padding(12.dp)) {
-                SectionTitle("Estadísticas de Lanzamiento")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = char.spellAbility, onValueChange = { onUpdate(char.copy(spellAbility = it)) }, label = { Text("Habilidad") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = "${char.spellSaveDC}", onValueChange = { onUpdate(char.copy(spellSaveDC = it.toIntOrNull() ?: 10)) }, label = { Text("CD Salv.") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    OutlinedTextField(value = if (char.spellAttackBonus >= 0) "+${char.spellAttackBonus}" else "${char.spellAttackBonus}", onValueChange = { onUpdate(char.copy(spellAttackBonus = it.toIntOrNull() ?: 0)) }, label = { Text("Ataque") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                }
-            }
+        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+        // 2. ACORDEÓN POR NIVELES
+        // Nivel 0 (Trucos)
+        SpellLevelSection(0, char, spellsByLevel[0] ?: emptyList(), onUpdate)
+
+        // Niveles 1 al 9
+        for (lvl in 1..9) {
+            SpellLevelSection(lvl, char, spellsByLevel[lvl] ?: emptyList(), onUpdate)
         }
 
-        Divider()
-        SectionTitle("Espacios de Conjuro")
-        Text("Usa +/- para definir Total. Toca círculos para Gastar.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-
-        for (level in 1..9) {
-            SpellSlotRowVisual(level, char, onUpdate)
+        // Botón Final
+        Button(
+            onClick = { showAddSpellDialog = true },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+        ) {
+            Icon(Icons.Default.AutoAwesome, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Aprender Nuevo Conjuro")
         }
 
-        Divider()
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            SectionTitle("Conjuros Preparados")
-            IconButton(onClick = { showAddSpellDialog = true }) {
-                Icon(Icons.Default.AddCircle, "Añadir", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-            }
-        }
-
-        if (char.spells.isEmpty()) {
-            Text("No hay conjuros preparados.", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-        } else {
-            char.spells.sortedBy { it.level }.forEach { spell ->
-                SpellCardDetailed(spell) {
-                    val newList = char.spells.toMutableList().apply { remove(spell) }
-                    onUpdate(char.copy(spells = newList))
-                }
-            }
-        }
         Spacer(Modifier.height(32.dp))
     }
 
@@ -296,7 +380,7 @@ fun MagicTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
 }
 
 // ==========================================
-// PESTAÑA 4: EQUIPO (Monedas, Objetos, Inventario)
+// PESTAÑA 4: EQUIPO
 // ==========================================
 @Composable
 fun EquipmentTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
@@ -315,7 +399,6 @@ fun EquipmentTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
 
         Divider()
 
-        // Objetos Sintonizados
         SectionTitle("Objetos Sintonizados (${char.attunedItems.size}/3)")
         char.attunedItems.forEachIndexed { index, item ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -349,9 +432,8 @@ fun EquipmentTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
 
         Divider()
 
-        // Inventario
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            SectionTitle("Mochila e Inventario")
+            SectionTitle("Inventario")
             IconButton(onClick = { showAddItemDialog = true }) {
                 Icon(Icons.Default.AddCircle, "Añadir", tint = MaterialTheme.colorScheme.primary)
             }
@@ -421,7 +503,7 @@ fun FeaturesTab(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
 }
 
 // ==========================================
-// COMPONENTES AUXILIARES
+// COMPONENTES AUXILIARES (UI)
 // ==========================================
 
 @Composable
@@ -432,12 +514,9 @@ fun SectionTitle(text: String) {
 @Composable
 fun CompactInput(label: String, value: Int, onValueChange: (Int) -> Unit) {
     OutlinedTextField(
-        value = "$value",
-        onValueChange = { onValueChange(it.toIntOrNull() ?: 0) },
-        label = { Text(label, fontSize = 11.sp) },
-        modifier = Modifier.width(90.dp),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        singleLine = true
+        value = "$value", onValueChange = { onValueChange(it.toIntOrNull() ?: 0) },
+        label = { Text(label, fontSize = 11.sp) }, modifier = Modifier.width(90.dp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true
     )
 }
 
@@ -446,12 +525,9 @@ fun CoinInput(label: String, value: Int, color: Color, onValueChange: (Int) -> U
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         OutlinedTextField(
-            value = "$value",
-            onValueChange = { onValueChange(it.toIntOrNull() ?: 0) },
-            modifier = Modifier.width(60.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            singleLine = true,
-            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center)
+            value = "$value", onValueChange = { onValueChange(it.toIntOrNull() ?: 0) },
+            modifier = Modifier.width(60.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true, textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center)
         )
     }
 }
@@ -462,10 +538,7 @@ fun StatBlock(statName: String, statValue: Int, onStatChange: (Int) -> Unit, cha
     val modStr = if (mod >= 0) "+$mod" else "$mod"
     val profBonus = char.proficiencyBonus
 
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(Modifier.padding(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -514,7 +587,125 @@ fun SkillRow(name: String, total: Int, isProficient: Boolean, onProficiencyChang
     }
 }
 
-// --- Cards & Dialogs ---
+// --- VISUAL MAGIC COMPONENTS ---
+
+@Composable
+fun MagicStatsHeader(char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MagicStatCard("Habilidad", char.spellAbility.ifEmpty { "INT" }, Modifier.weight(1f), color = MaterialTheme.colorScheme.primaryContainer) {
+            OutlinedTextField(value = char.spellAbility, onValueChange = { onUpdate(char.copy(spellAbility = it)) }, textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center))
+        }
+        MagicStatCard("CD Salv.", "${char.spellSaveDC}", Modifier.weight(1f), isBig = true, color = MaterialTheme.colorScheme.tertiaryContainer) {
+            OutlinedTextField(value = "${char.spellSaveDC}", onValueChange = { onUpdate(char.copy(spellSaveDC = it.toIntOrNull()?:10)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center))
+        }
+        MagicStatCard("Ataque", if(char.spellAttackBonus >= 0) "+${char.spellAttackBonus}" else "${char.spellAttackBonus}", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondaryContainer) {
+            OutlinedTextField(value = "${char.spellAttackBonus}", onValueChange = { onUpdate(char.copy(spellAttackBonus = it.toIntOrNull()?:0)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center))
+        }
+    }
+}
+
+@Composable
+fun MagicStatCard(label: String, value: String, modifier: Modifier = Modifier, isBig: Boolean = false, color: Color, editContent: @Composable () -> Unit) {
+    var isEditing by remember { mutableStateOf(false) }
+    Card(modifier = modifier.clickable { isEditing = !isEditing }.height(if (isEditing) 90.dp else 80.dp), colors = CardDefaults.cardColors(containerColor = color)) {
+        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            if (isEditing) {
+                Text(label, style = MaterialTheme.typography.labelSmall)
+                Box(Modifier.padding(4.dp)) { editContent() }
+            } else {
+                Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text(text = value, style = if(isBig) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun SpellLevelSection(level: Int, char: PlayerCharacter, spells: List<Spell>, onUpdate: (PlayerCharacter) -> Unit) {
+    var isExpanded by remember { mutableStateOf(true) }
+    val totalKey = "$level"; val usedKey = "${level}_used"
+    val totalSlots = char.spellSlots[totalKey] ?: 0; val usedSlots = char.spellSlots[usedKey] ?: 0
+    val title = if (level == 0) "Trucos" else "Nivel $level"
+
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().clickable { isExpanded = !isExpanded }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                }
+                if (level > 0 && totalSlots > 0) Text("${totalSlots - usedSlots} libres", style = MaterialTheme.typography.labelSmall)
+            }
+
+            if (isExpanded) {
+                Spacer(Modifier.height(12.dp))
+                if (level > 0) {
+                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f), RoundedCornerShape(8.dp)).padding(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                            Text("Espacios:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { if (totalSlots > 0) updateSlots(char, level, totalSlots - 1, minOf(usedSlots, totalSlots - 1), onUpdate) }, modifier = Modifier.size(20.dp)) { Icon(Icons.Default.Remove, null) }
+                                Text("Max: $totalSlots", fontSize = 12.sp)
+                                IconButton(onClick = { if (totalSlots < 9) updateSlots(char, level, totalSlots + 1, usedSlots, onUpdate) }, modifier = Modifier.size(20.dp)) { Icon(Icons.Default.Add, null) }
+                            }
+                        }
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (i in 0 until totalSlots) {
+                                val isUsed = i < usedSlots
+                                Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(if (isUsed) Color.Gray.copy(alpha=0.2f) else MaterialTheme.colorScheme.primary).border(1.dp, MaterialTheme.colorScheme.primary, CircleShape).clickable {
+                                    updateSlots(char, level, totalSlots, if (isUsed) i else i + 1, onUpdate)
+                                }, contentAlignment = Alignment.Center) {
+                                    if (isUsed) Icon(Icons.Default.Close, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (spells.isEmpty()) Text("Sin conjuros.", style = MaterialTheme.typography.bodySmall, color = Color.Gray, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                else spells.forEach { spell ->
+                    SpellCardCompact(spell) { onUpdate(char.copy(spells = char.spells - spell)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SpellCardCompact(spell: Spell, onDelete: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { expanded = !expanded }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(1.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(spell.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Row {
+                    if (spell.concentration) Text("C", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, fontSize = 10.sp, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.secondary, CircleShape).padding(horizontal=4.dp))
+                    Spacer(Modifier.width(4.dp))
+                    if (spell.ritual) Text("R", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary, fontSize = 10.sp, modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.tertiary, CircleShape).padding(horizontal=4.dp))
+                }
+            }
+            if (expanded) {
+                Divider(Modifier.padding(vertical = 8.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) { Text("Tiempo: ${spell.castingTime}", fontSize = 11.sp); Text("Duración: ${spell.duration}", fontSize = 11.sp) }
+                    Column(Modifier.weight(1f)) { Text("Alcance: ${spell.range}", fontSize = 11.sp); Text("Comp: ${spell.components}", fontSize = 11.sp) }
+                }
+                if (spell.notes.isNotEmpty()) Text(spell.notes, fontSize = 12.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.padding(top = 4.dp))
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                    TextButton(onClick = onDelete) { Text("Olvidar", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                }
+            }
+        }
+    }
+}
+
+fun updateSlots(char: PlayerCharacter, level: Int, total: Int, used: Int, onUpdate: (PlayerCharacter) -> Unit) {
+    val newSlots = char.spellSlots.toMutableMap(); newSlots["$level"] = total; newSlots["${level}_used"] = used
+    onUpdate(char.copy(spellSlots = newSlots))
+}
+
+// --- CARDS & DIALOGOS ---
 
 @Composable
 fun AttackCard(attack: Attack, onDelete: () -> Unit) {
@@ -526,10 +717,7 @@ fun AttackCard(attack: Attack, onDelete: () -> Unit) {
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             Row(Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    Text("Bono/CD: ${attack.bonus}", fontWeight = FontWeight.Bold)
-                    Text("Daño: ${attack.damage}", color = MaterialTheme.colorScheme.primary)
-                }
+                Column(Modifier.weight(1f)) { Text("Bono/CD: ${attack.bonus}", fontWeight = FontWeight.Bold); Text("Daño: ${attack.damage}", color = MaterialTheme.colorScheme.primary) }
                 Column(Modifier.weight(1f)) { Text("Tipo: ${attack.damageType}", style = MaterialTheme.typography.bodySmall) }
             }
             if (attack.notes.isNotEmpty()) Text("Notas: ${attack.notes}", style = MaterialTheme.typography.bodySmall, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
@@ -542,10 +730,7 @@ fun InventoryItemRow(item: InventoryItem, onDelete: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Row(modifier = Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
-                Row {
-                    Text("${item.quantity}x ", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text(item.name, fontWeight = FontWeight.Bold)
-                }
+                Row { Text("${item.quantity}x ", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary); Text(item.name, fontWeight = FontWeight.Bold) }
                 if (item.notes.isNotEmpty()) Text(item.notes, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
             IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Delete, null, tint = Color.Gray) }
@@ -554,84 +739,13 @@ fun InventoryItemRow(item: InventoryItem, onDelete: () -> Unit) {
 }
 
 @Composable
-fun SpellSlotRowVisual(level: Int, char: PlayerCharacter, onUpdate: (PlayerCharacter) -> Unit) {
-    val totalKey = "$level"; val usedKey = "${level}_used"
-    val totalSlots = char.spellSlots[totalKey] ?: 0; val usedSlots = char.spellSlots[usedKey] ?: 0
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(60.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(4.dp)).padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-            Text("Nivel $level", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { if (totalSlots > 0) updateSlots(char, level, totalSlots - 1, minOf(usedSlots, totalSlots - 1), onUpdate) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Remove, null) }
-            Text("$totalSlots", fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp))
-            IconButton(onClick = { if (totalSlots < 9) updateSlots(char, level, totalSlots + 1, usedSlots, onUpdate) }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Add, null) }
-        }
-        Spacer(Modifier.width(12.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (i in 0 until totalSlots) {
-                val isUsed = i < usedSlots
-                Box(
-                    modifier = Modifier.size(26.dp).clip(CircleShape).background(if (isUsed) MaterialTheme.colorScheme.primary else Color.Transparent).border(2.dp, MaterialTheme.colorScheme.primary, CircleShape).clickable {
-                        val newUsed = if (isUsed) i else i + 1; updateSlots(char, level, totalSlots, newUsed, onUpdate)
-                    }, contentAlignment = Alignment.Center
-                ) { if (isUsed) Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp)) }
-            }
-        }
-    }
-}
-
-fun updateSlots(char: PlayerCharacter, level: Int, total: Int, used: Int, onUpdate: (PlayerCharacter) -> Unit) {
-    val newSlots = char.spellSlots.toMutableMap(); newSlots["$level"] = total; newSlots["${level}_used"] = used
-    onUpdate(char.copy(spellSlots = newSlots))
-}
-
-@Composable
-fun SpellCardDetailed(spell: Spell, onDelete: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), elevation = CardDefaults.cardElevation(2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text(spell.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(if(spell.level == 0) "Truco" else "Nivel ${spell.level}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Delete, null, tint = Color.Gray) }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            Row(Modifier.fillMaxWidth()) {
-                Column(Modifier.weight(1f)) {
-                    Text("Tiempo: ${spell.castingTime}", style = MaterialTheme.typography.bodySmall)
-                    Text("Duración: ${spell.duration}", style = MaterialTheme.typography.bodySmall)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("Comp: ${spell.components}", style = MaterialTheme.typography.bodySmall)
-                    Text("Alcance: ${spell.range}", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if(spell.material.isNotEmpty()) Text("Mat: ${spell.material}", style = MaterialTheme.typography.labelSmall, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (spell.concentration) SuggestionChip(onClick = {}, label = { Text("Concentración") })
-                if (spell.ritual) SuggestionChip(onClick = {}, label = { Text("Ritual") })
-            }
-            if (spell.notes.isNotEmpty()) Text(spell.notes, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-// --- DIALOGOS ---
-
-@Composable
 fun AddAttackDialog(onDismiss: () -> Unit, onAdd: (Attack) -> Unit) {
     var name by remember { mutableStateOf("") }; var bonus by remember { mutableStateOf("") }
-    var damage by remember { mutableStateOf("") }; var type by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
+    var damage by remember { mutableStateOf("") }; var type by remember { mutableStateOf("") }; var notes by remember { mutableStateOf("") }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Nuevo Ataque") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Nombre") })
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(bonus, { bonus = it }, label = { Text("Bono (+5)") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(damage, { damage = it }, label = { Text("Daño (1d8)") }, modifier = Modifier.weight(1f))
-            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(bonus, { bonus = it }, label = { Text("Bono") }, modifier = Modifier.weight(1f)); OutlinedTextField(damage, { damage = it }, label = { Text("Daño") }, modifier = Modifier.weight(1f)) }
             OutlinedTextField(type, { type = it }, label = { Text("Tipo") }); OutlinedTextField(notes, { notes = it }, label = { Text("Notas") })
         }
     }, confirmButton = { Button(onClick = { onAdd(Attack(name, bonus, damage, type, notes)) }) { Text("Añadir") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
@@ -658,24 +772,11 @@ fun AddSpellDialogDetailed(onDismiss: () -> Unit, onAdd: (Spell) -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Nuevo Conjuro") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(level, { level = it }, label = { Text("Nivel (0-9)") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                OutlinedTextField(castingTime, { castingTime = it }, label = { Text("Tirada") }, modifier = Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(duration, { duration = it }, label = { Text("Duración") }, modifier = Modifier.weight(1f))
-                OutlinedTextField(range, { range = it }, label = { Text("Alcance") }, modifier = Modifier.weight(1f))
-            }
-            OutlinedTextField(components, { components = it }, label = { Text("Comp (V,S,M)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(material, { material = it }, label = { Text("Materiales") }, modifier = Modifier.fillMaxWidth())
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = concentration, onCheckedChange = { concentration = it }); Text("Concentración", fontSize = 12.sp)
-                Spacer(Modifier.width(8.dp))
-                Checkbox(checked = ritual, onCheckedChange = { ritual = it }); Text("Ritual", fontSize = 12.sp)
-            }
-            OutlinedTextField(notes, { notes = it }, label = { Text("Notas") }, modifier = Modifier.fillMaxWidth().height(100.dp))
+            Row { OutlinedTextField(level, { level = it }, label = { Text("Nivel") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)); OutlinedTextField(castingTime, { castingTime = it }, label = { Text("Tirada") }, modifier = Modifier.weight(1f)) }
+            Row { OutlinedTextField(duration, { duration = it }, label = { Text("Duración") }, modifier = Modifier.weight(1f)); OutlinedTextField(range, { range = it }, label = { Text("Alcance") }, modifier = Modifier.weight(1f)) }
+            OutlinedTextField(components, { components = it }, label = { Text("Comp (V,S,M)") }); OutlinedTextField(material, { material = it }, label = { Text("Materiales") })
+            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(concentration, { concentration = it }); Text("Conc."); Spacer(Modifier.width(8.dp)); Checkbox(ritual, { ritual = it }); Text("Ritual") }
+            OutlinedTextField(notes, { notes = it }, label = { Text("Notas") }, modifier = Modifier.height(100.dp))
         }
-    }, confirmButton = {
-        Button(onClick = { onAdd(Spell(name, level.toIntOrNull()?:0, castingTime, duration, range, components, material, concentration, ritual, notes)) }) { Text("Añadir") }
-    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
+    }, confirmButton = { Button(onClick = { onAdd(Spell(name, level.toIntOrNull()?:0, castingTime, duration, range, components, material, concentration, ritual, notes)) }) { Text("Añadir") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
 }
