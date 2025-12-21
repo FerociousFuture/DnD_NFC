@@ -1,29 +1,23 @@
 package com.example.dnd_nfc.data.model
 
-/**
- * Modelo completo de la hoja de personaje (D&D 5e / 2024).
- * Contiene todos los campos del PDF para guardar en Firebase.
- */
 data class PlayerCharacter(
     val id: String = "",
     val userId: String = "",
 
-    // --- CABECERA ---
+    // --- CABECERA (D&D 2024) ---
     val name: String = "",
     val charClass: String = "",
     val subclass: String = "",
     val level: Int = 1,
-    val race: String = "", // Especie
+    val race: String = "", // "Especie" en 2024
     val background: String = "",
+    val size: String = "Mediano",
     val xp: String = "",
+    val alignment: String = "",
 
-    // --- ESTADÍSTICAS (Base) ---
-    val str: Int = 10,
-    val dex: Int = 10,
-    val con: Int = 10,
-    val int: Int = 10,
-    val wis: Int = 10,
-    val cha: Int = 10,
+    // --- ESTADÍSTICAS ---
+    val str: Int = 10, val dex: Int = 10, val con: Int = 10,
+    val int: Int = 10, val wis: Int = 10, val cha: Int = 10,
 
     // --- COMBATE ---
     val ac: Int = 10,
@@ -32,27 +26,47 @@ data class PlayerCharacter(
     val hpMax: Int = 10,
     val hpCurrent: Int = 10,
     val tempHp: Int = 0,
-    val hitDice: String = "1d8",
-    val deathSavesSuccess: Int = 0,
-    val deathSavesFail: Int = 0,
+    val hitDiceTotal: String = "1d8",
+    val hitDiceUsed: Int = 0,
+    val deathSaveSuccess: Int = 0,
+    val deathSaveFail: Int = 0,
+    val inspiration: Boolean = false, // Inspiración Heroica
 
-    // --- COMPETENCIAS Y HABILIDADES ---
+    // --- HABILIDADES Y COMPETENCIAS ---
     val proficiencyBonus: Int = 2,
     val passivePerception: Int = 10,
-    // Guardamos las skills en un mapa: "Acrobacias" -> true (es competente)
-    val skillProficiencies: Map<String, Boolean> = emptyMap(),
-    val savingThrowProficiencies: Map<String, Boolean> = emptyMap(),
+    val skillProficiencies: String = "", // Guardado como texto simple por ahora
+    val savingThrowProficiencies: String = "",
 
-    // --- OTROS ---
-    val attacksAndSpells: String = "", // Texto libre para armas/ataques
-    val featuresAndTraits: String = "", // Rasgos de clase/raza
-    val inventory: String = "", // Equipo y monedas
-    val proficienciesAndLanguages: String = "", // Idiomas y herramientas
+    // --- RASGOS ---
+    val classFeatures: String = "",
+    val speciesTraits: String = "",
+    val feats: String = "",
+    val otherProficiencies: String = "", // Herramientas e Idiomas
 
-    // --- TRASFONDO ---
+    // --- EQUIPO Y MONEDAS ---
+    val inventory: String = "",
+    val cp: Int = 0, val sp: Int = 0, val ep: Int = 0, val gp: Int = 0, val pp: Int = 0,
+
+    // --- MAGIA ---
+    val spellAbility: String = "INT",
+    val spellSaveDC: Int = 10,
+    val spellAttackBonus: Int = 2,
+    val spellSlots: Map<String, Int> = emptyMap(), // Ej: "1"->4, "1_used"->2
+    val spells: List<Spell> = emptyList(),
+
+    // --- BIO ---
     val personality: String = "",
     val ideals: String = "",
     val bonds: String = "",
     val flaws: String = "",
     val backstory: String = ""
+)
+
+data class Spell(
+    val name: String = "",
+    val level: Int = 0,
+    val time: String = "",
+    val range: String = "",
+    val description: String = ""
 )
