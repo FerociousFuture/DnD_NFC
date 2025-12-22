@@ -100,7 +100,7 @@ object NfcCombatManager {
         return null
     }
 
-    private fun writeTag(tag: Tag, state: BattleState): Boolean {
+    fun writeTag(tag: Tag, state: BattleState): Boolean {
         try {
             val json = gson.toJson(state)
             val record = NdefRecord.createMime("application/dnd", json.toByteArray()) // MimeType personalizado

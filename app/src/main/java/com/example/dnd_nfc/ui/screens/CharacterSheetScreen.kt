@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.local.CharacterManager
 import com.example.dnd_nfc.data.model.Attack
+import com.example.dnd_nfc.data.model.BattleState // <--- IMPORTANTE: Necesario para el modo combate
 import com.example.dnd_nfc.data.model.InventoryItem
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.Spell
@@ -39,7 +40,8 @@ fun CharacterSheetScreen(
     characterId: String? = null,
     existingCharacter: PlayerCharacter? = null,
     onBack: () -> Unit,
-    onWriteNfc: (PlayerCharacter) -> Unit
+    onWriteNfc: (PlayerCharacter) -> Unit, // Guardar Backup Completo
+    onWriteCombatNfc: (BattleState) -> Unit // <--- NUEVO: Crear Figura de Combate
 ) {
     val context = LocalContext.current
     // Si no existe, creamos uno nuevo. Si existe, usamos el pasado por parámetro.
@@ -69,14 +71,32 @@ fun CharacterSheetScreen(
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") }
                 },
                 actions = {
-                    // Botón NFC
-                    IconButton(onClick = { onWriteNfc(charData) }, enabled = isFormValid) {
-                        Icon(Icons.Default.Nfc, "Vincular", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
+                    // BOTÓN 1: MODO COMBATE (Rayo) - Inicializar Miniatura estilo "Skylander"
+                    if (charData.id.isNotEmpty()) {
+                        IconButton(onClick = {
+                            // Convertimos la ficha completa en un estado de batalla ligero
+                            val battleState = BattleState(
+                                id = charData.id,
+                                name = charData.name,
+                                hp = charData.hpCurrent,
+                                maxHp = charData.hpMax,
+                                ac = charData.ac,
+                                // initiative = charData.initiative // Descomenta si tu BattleState tiene iniciativa
+                            )
+                            onWriteCombatNfc(battleState)
+                        }, enabled = isFormValid) {
+                            Icon(Icons.Default.FlashOn, "Crear Figura Combate", tint = MaterialTheme.colorScheme.tertiary)
+                        }
                     }
 
-                    // Botón Guardar (LOCAL)
+                    // BOTÓN 2: MODO BACKUP (Icono NFC) - Guardar Ficha Completa
+                    IconButton(onClick = { onWriteNfc(charData) }, enabled = isFormValid) {
+                        Icon(Icons.Default.Nfc, "Backup NFC", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
+                    }
+
+                    // BOTÓN 3: GUARDAR LOCAL (Disco)
                     IconButton(onClick = { showSaveDialog = true }, enabled = isFormValid) {
-                        Icon(Icons.Default.Save, "Guardar", tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray)
+                        Icon(Icons.Default.Save, "Guardar Local", tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray)
                     }
                 }
             )
@@ -121,9 +141,7 @@ fun CharacterSheetScreen(
             onDismissRequest = { showSaveDialog = false },
             icon = { Icon(Icons.Default.Save, null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text("¿Guardar Personaje?") },
-            text = {
-                Text("Los datos se guardarán en la memoria de este dispositivo.")
-            },
+            text = { Text("Los datos se guardarán en la memoria de este dispositivo.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -134,14 +152,10 @@ fun CharacterSheetScreen(
                             onBack() // Volvemos a la lista si se guardó bien
                         }
                     }
-                ) {
-                    Text("Confirmar")
-                }
+                ) { Text("Confirmar") }
             },
             dismissButton = {
-                TextButton(onClick = { showSaveDialog = false }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { showSaveDialog = false }) { Text("Cancelar") }
             }
         )
     }
