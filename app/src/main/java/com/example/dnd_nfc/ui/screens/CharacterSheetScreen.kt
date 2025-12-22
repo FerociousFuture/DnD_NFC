@@ -36,6 +36,7 @@ import com.example.dnd_nfc.data.model.InventoryItem
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.Spell
 import com.example.dnd_nfc.utils.QrCodeHelper
+import com.google.gson.Gson // <--- 1. IMPORTANTE: AÑADIR ESTO
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,15 +45,12 @@ fun CharacterSheetScreen(
     characterId: String? = null,
     existingCharacter: PlayerCharacter? = null,
     onBack: () -> Unit,
-    onWriteNfc: (PlayerCharacter) -> Unit, // Se mantiene por compatibilidad, aunque ahora usamos QR
-    onWriteCombatNfc: (BattleState) -> Unit // Crear Figura de Combate
+    onWriteNfc: (PlayerCharacter) -> Unit,
+    onWriteCombatNfc: (BattleState) -> Unit
 ) {
     val context = LocalContext.current
-    // Si no existe, creamos uno nuevo. Si existe, usamos el pasado por parámetro.
     var charData by remember { mutableStateOf(existingCharacter ?: PlayerCharacter(id = UUID.randomUUID().toString())) }
     var selectedTab by remember { mutableIntStateOf(0) }
-
-    // Estados para control de flujo
     var showSaveDialog by remember { mutableStateOf(false) }
 
     // ESTADOS PARA QR
@@ -60,38 +58,26 @@ fun CharacterSheetScreen(
     var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     val tabs = listOf("General", "Combate", "Magia", "Equipo", "Rasgos")
-    val icons = listOf(
-        Icons.Default.Face,
-        Icons.Default.Shield,
-        Icons.Default.AutoStories,
-        Icons.Default.Backpack,
-        Icons.Default.Description
-    )
-
-    // Validación mínima para permitir guardar/vincular
+    val icons = listOf(Icons.Default.Face, Icons.Default.Shield, Icons.Default.AutoStories, Icons.Default.Backpack, Icons.Default.Description)
     val isFormValid = charData.name.isNotBlank() && charData.charClass.isNotBlank()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (charData.name.isEmpty()) "Nuevo Personaje" else charData.name) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") }
-                },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Atrás") } },
                 actions = {
-                    // BOTÓN 1: MODO COMBATE (Rayo) - Inicializar Miniatura estilo "Skylander"
+                    // BOTÓN 1: MODO COMBATE
                     if (charData.id.isNotEmpty()) {
                         IconButton(onClick = {
-                            // Calculamos el modificador de destreza para la iniciativa automática
                             val dexMod = (charData.dex - 10) / 2
-
                             val battleState = BattleState(
                                 id = charData.id,
                                 name = charData.name,
                                 hp = charData.hpCurrent,
                                 maxHp = charData.hpMax,
                                 ac = charData.ac,
-                                initiativeMod = dexMod // Usamos el modificador para la tirada automática
+                                initiativeMod = dexMod
                             )
                             onWriteCombatNfc(battleState)
                         }, enabled = isFormValid) {
@@ -99,10 +85,13 @@ fun CharacterSheetScreen(
                         }
                     }
 
-                    // BOTÓN 2: MODO BACKUP QR (Icono QR) - Generar Código
+                    // BOTÓN 2: MODO BACKUP QR (CORREGIDO)
                     IconButton(onClick = {
-                        val compressedData = DataCompressor.compress(charData)
-                        if (compressedData != null) {
+                        // 2. CORRECCIÓN: Convertir Objeto -> JSON -> String Comprimido
+                        val json = Gson().toJson(charData) // Convertimos a texto
+                        val compressedData = DataCompressor.compress(json) // Comprimimos el texto
+
+                        if (compressedData.isNotEmpty()) {
                             qrBitmap = QrCodeHelper.generateQrBitmap(compressedData)
                             if (qrBitmap != null) {
                                 showQrDialog = true
@@ -112,7 +101,7 @@ fun CharacterSheetScreen(
                         Icon(Icons.Default.QrCode, "Backup QR", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
                     }
 
-                    // BOTÓN 3: GUARDAR LOCAL (Disco)
+                    // BOTÓN 3: GUARDAR LOCAL
                     IconButton(onClick = { showSaveDialog = true }, enabled = isFormValid) {
                         Icon(Icons.Default.Save, "Guardar Local", tint = if (isFormValid) MaterialTheme.colorScheme.primary else Color.Gray)
                     }
@@ -122,27 +111,13 @@ fun CharacterSheetScreen(
         bottomBar = {
             NavigationBar {
                 tabs.forEachIndexed { index, title ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = { Icon(icons[index], contentDescription = title) },
-                        label = { Text(title, fontSize = 10.sp) }
-                    )
+                    NavigationBarItem(selected = selectedTab == index, onClick = { selectedTab = index }, icon = { Icon(icons[index], title) }, label = { Text(title, fontSize = 10.sp) })
                 }
             }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-
-            if (!isFormValid) {
-                Text(
-                    text = "* Faltan datos obligatorios: Nombre y Clase",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-            }
-
+            if (!isFormValid) Text("* Faltan datos obligatorios: Nombre y Clase", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp))
             when (selectedTab) {
                 0 -> GeneralTab(charData) { charData = it }
                 1 -> CombatTab(charData) { charData = it }
@@ -159,26 +134,17 @@ fun CharacterSheetScreen(
             onDismissRequest = { showQrDialog = false },
             title = { Text("Respaldo QR", fontWeight = FontWeight.Bold) },
             text = {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text("Escanea este código desde otro dispositivo para copiar el personaje.", textAlign = TextAlign.Center)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Image(
-                        bitmap = qrBitmap!!.asImageBitmap(),
-                        contentDescription = "QR Code",
-                        modifier = Modifier.size(250.dp).border(1.dp, Color.Black)
-                    )
+                    Image(bitmap = qrBitmap!!.asImageBitmap(), contentDescription = "QR Code", modifier = Modifier.size(250.dp).border(1.dp, Color.Black))
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showQrDialog = false }) { Text("Cerrar") }
-            }
+            confirmButton = { TextButton(onClick = { showQrDialog = false }) { Text("Cerrar") } }
         )
     }
 
-    // --- DIÁLOGO DE CONFIRMACIÓN DE GUARDADO (LOCAL) ---
+    // --- DIÁLOGO GUARDAR ---
     if (showSaveDialog) {
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
@@ -186,20 +152,12 @@ fun CharacterSheetScreen(
             title = { Text("¿Guardar Personaje?") },
             text = { Text("Los datos se guardarán en la memoria de este dispositivo.") },
             confirmButton = {
-                Button(
-                    onClick = {
-                        showSaveDialog = false
-                        // Guardado Local usando CharacterManager
-                        val success = CharacterManager.saveCharacter(context, charData)
-                        if (success) {
-                            onBack() // Volvemos a la lista si se guardó bien
-                        }
-                    }
-                ) { Text("Confirmar") }
+                Button(onClick = {
+                    showSaveDialog = false
+                    if (CharacterManager.saveCharacter(context, charData)) onBack()
+                }) { Text("Confirmar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showSaveDialog = false }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showSaveDialog = false }) { Text("Cancelar") } }
         )
     }
 }

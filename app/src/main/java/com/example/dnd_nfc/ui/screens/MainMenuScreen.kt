@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.dnd_nfc.data.local.DataCompressor
 import com.example.dnd_nfc.data.model.PlayerCharacter
+import com.google.gson.Gson // <--- IMPORTANTE
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
@@ -26,7 +27,7 @@ fun MainMenuScreen(
     onNavigateToCharacters: () -> Unit,
     onNavigateToCampaigns: () -> Unit,
     onNavigateToCombat: () -> Unit,
-    onCharacterImported: (PlayerCharacter) -> Unit // Nuevo Callback
+    onCharacterImported: (PlayerCharacter) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -35,16 +36,20 @@ fun MainMenuScreen(
         if (result.contents != null) {
             val qrContent = result.contents
             try {
-                // Descomprimimos usando tu DataCompressor
-                val character = DataCompressor.decompress(qrContent)
-                if (character != null) {
+                // 1. Descomprimimos el texto
+                val json = DataCompressor.decompress(qrContent)
+
+                // 2. Convertimos el JSON a Objeto PlayerCharacter (ESTO FALTABA)
+                if (json.isNotEmpty()) {
+                    val character = Gson().fromJson(json, PlayerCharacter::class.java)
                     Toast.makeText(context, "¡Personaje detectado: ${character.name}!", Toast.LENGTH_SHORT).show()
                     onCharacterImported(character)
                 } else {
-                    Toast.makeText(context, "Error: Datos QR inválidos o dañados.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Error: Datos QR vacíos o corruptos.", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 Toast.makeText(context, "Error al leer QR: ${e.message}", Toast.LENGTH_LONG).show()
+                e.printStackTrace()
             }
         }
     }
@@ -68,7 +73,7 @@ fun MainMenuScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // BOTÓN ESCANEAR QR (NUEVO)
+        // BOTÓN ESCANEAR QR
         Button(
             onClick = {
                 val options = ScanOptions()
