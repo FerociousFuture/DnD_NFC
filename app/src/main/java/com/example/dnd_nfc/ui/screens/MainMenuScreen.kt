@@ -8,73 +8,61 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun MainMenuScreen(
-    onNavigateToCharacters: () -> Unit, // Ir a "Biblioteca" (Lista)
-    onNavigateToNewCharacter: () -> Unit, // Ir a "Nueva Figura Vacía"
+    onNavigateToCharacters: () -> Unit,
+    onNavigateToNewCharacter: () -> Unit,
+    onNavigateToCombat: () -> Unit, // <--- Nueva navegación
     onNavigateToCampaigns: () -> Unit,
-    onNavigateToCombat: () -> Unit,
     onCharacterImported: (Any) -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = Icons.Default.Nfc,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = MaterialTheme.colorScheme.primary
-        )
-
+        Icon(Icons.Default.Nfc, null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            "Gestor de Figuras",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Text("D&D NFC Master", style = MaterialTheme.typography.headlineMedium)
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // OPCIÓN 1: BIBLIOTECA (CARGAR PRE-GUARDADO)
+        // 1. BIBLIOTECA
         Button(
             onClick = onNavigateToCharacters,
-            modifier = Modifier.fillMaxWidth().height(70.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            modifier = Modifier.fillMaxWidth().height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
         ) {
             Icon(Icons.Default.List, null)
             Spacer(Modifier.width(16.dp))
+            Text("Biblioteca de Figuras")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 2. MESA DE COMBATE (NUEVO)
+        Button(
+            onClick = onNavigateToCombat,
+            modifier = Modifier.fillMaxWidth().height(70.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Icon(Icons.Default.Swords, null, modifier = Modifier.size(32.dp))
+            Spacer(Modifier.width(16.dp))
             Column {
-                Text("Biblioteca de Figuras", style = MaterialTheme.typography.titleMedium)
-                Text("Cargar Goblins, Lobos, Jugadores...", style = MaterialTheme.typography.bodySmall)
+                Text("MESA DE COMBATE", style = MaterialTheme.typography.titleMedium)
+                Text("Iniciativa y Turnos", style = MaterialTheme.typography.bodySmall)
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // OPCIÓN 2: NUEVA FIGURA (DESDE CERO)
-        OutlinedButton(
-            onClick = onNavigateToNewCharacter,
-            modifier = Modifier.fillMaxWidth().height(60.dp)
-        ) {
+        // 3. NUEVA FIGURA
+        OutlinedButton(onClick = onNavigateToNewCharacter, modifier = Modifier.fillMaxWidth().height(60.dp)) {
             Icon(Icons.Default.Add, null)
             Spacer(Modifier.width(16.dp))
             Text("Crear Figura Nueva")
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Text(
-            "O acerca una figura para leerla",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
-        )
     }
 }

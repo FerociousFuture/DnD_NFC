@@ -6,6 +6,12 @@ data class BattleState(
     val hp: Int,
     val maxHp: Int,
     val ac: Int,
-    val initiativeMod: Int = 0, // NUEVO: Para calcular iniciativa automática
-    val currentInitiative: Int? = null // Opcional: para guardar el resultado actual
+    val status: String = "Normal", // Estado (Envenenado, etc)
+
+    // Iniciativa
+    var initiativeBonus: Int = 0, // Se edita manualmente antes de empezar
+    var initiativeTotal: Int = 0, // Resultado del dado + bono
+
+    // Control de UI
+    var isSelected: Boolean = false // Para seleccionar a quién pegar/curar
 )
