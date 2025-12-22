@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 fun MainMenuScreen(
     onNavigateToCharacters: () -> Unit,
     onNavigateToNewCharacter: () -> Unit,
-    onNavigateToCombat: () -> Unit, // <--- Nueva navegación
+    onNavigateToCombat: () -> Unit,
     onNavigateToCampaigns: () -> Unit,
     onCharacterImported: (Any) -> Unit
 ) {
@@ -42,13 +42,14 @@ fun MainMenuScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 2. MESA DE COMBATE (NUEVO)
+        // 2. MESA DE COMBATE
         Button(
             onClick = onNavigateToCombat,
             modifier = Modifier.fillMaxWidth().height(70.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Icon(Icons.Default.Swords, null, modifier = Modifier.size(32.dp))
+            // CORRECCIÓN AQUÍ: Usamos FlashOn en lugar de Swords
+            Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(32.dp))
             Spacer(Modifier.width(16.dp))
             Column {
                 Text("MESA DE COMBATE", style = MaterialTheme.typography.titleMedium)

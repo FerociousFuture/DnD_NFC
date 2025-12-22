@@ -34,27 +34,15 @@ class MainActivity : ComponentActivity() {
     private var nfcAdapter: NfcAdapter? = null
 
     // --- ESTADOS GLOBALES ---
-
-    // 1. Escritura NFC (Si no es nulo, el próximo toque escribe esto)
     private var pendingCharacterToWrite: PlayerCharacter? = null
-
-    // 2. Lista de Combate (Centralizada aquí para que persista durante la navegación)
     private val combatList = mutableStateListOf<BattleState>()
-
-    // 3. Control de Modo Combate (Para saber si el escaneo va a la mesa o al lector)
     private var isCombatModeActive by mutableStateOf(false)
-
-    // 4. Último escaneo (Para mostrar en NfcReadScreen)
     private var lastScanEvent by mutableStateOf<ScanEvent?>(null)
-
-    // Callback temporal para navegación
     private var onNfcScanned: ((ScanEvent) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
-
-        // FORZAR MODO VERTICAL
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         setContent {
@@ -63,22 +51,15 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val context = LocalContext.current
 
-                    // Detectar en qué pantalla estamos para ajustar el comportamiento del NFC
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
-
-                    // Si estamos en "action_screen", activamos modo combate para redirección directa
                     isCombatModeActive = (currentRoute == "action_screen")
 
-                    // Configuración para redirección automática al leer (fuera de combate)
                     DisposableEffect(Unit) {
                         onNfcScanned = { event ->
                             lastScanEvent = event
-                            // Solo navegamos si NO estamos en combate
                             if (!isCombatModeActive) {
-                                navController.navigate("nfc_read") {
-                                    launchSingleTop = true
-                                }
+                                navController.navigate("nfc_read") { launchSingleTop = true }
                             }
                         }
                         onDispose { onNfcScanned = null }
@@ -86,21 +67,18 @@ class MainActivity : ComponentActivity() {
 
                     NavHost(navController = navController, startDestination = "main_menu") {
 
-                        // --- MENÚ PRINCIPAL ---
+                        // 1. MENÚ PRINCIPAL
                         composable("main_menu") {
-                            // Limpieza de estados al volver al menú
                             DisposableEffect(Unit) {
                                 pendingCharacterToWrite = null
                                 onDispose { }
                             }
-
                             MainMenuScreen(
                                 onNavigateToCharacters = { navController.navigate("character_list") },
                                 onNavigateToNewCharacter = { navController.navigate("character_sheet/new") },
                                 onNavigateToCombat = { navController.navigate("action_screen") },
-                                onNavigateToCampaigns = { }, // Sin uso por ahora
+                                onNavigateToCampaigns = { },
                                 onCharacterImported = { importedChar ->
-                                    // Callback para cuando leemos QR
                                     if (importedChar is PlayerCharacter) {
                                         CharacterManager.saveCharacter(context, importedChar)
                                         navController.navigate("character_sheet/${importedChar.id}")
@@ -109,13 +87,12 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- BIBLIOTECA DE FIGURAS (LISTA) ---
+                        // 2. LISTA DE PERSONAJES (BIBLIOTECA) - ¡ESTA ES LA QUE FALTABA!
                         composable("character_list") {
                             DisposableEffect(Unit) {
                                 pendingCharacterToWrite = null
                                 onDispose { }
                             }
-
                             CharacterListScreen(
                                 onCharacterClick = { char ->
                                     navController.navigate("character_sheet/${char.id}")
@@ -126,7 +103,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- EDITOR DE FIGURA (CREAR/EDITAR) ---
+                        // 3. EDITOR DE PERSONAJE
                         composable("character_sheet/{charId}") { backStackEntry ->
                             val charId = backStackEntry.arguments?.getString("charId")
                             val character = if (charId != null && charId != "new") {
@@ -136,24 +113,21 @@ class MainActivity : ComponentActivity() {
                             CharacterSheetScreen(
                                 existingCharacter = character,
                                 onBack = { navController.popBackStack() },
-
-                                // Acción: Botón "GRABAR MINI"
                                 onWriteNfc = { charData ->
                                     pendingCharacterToWrite = charData
-                                    Toast.makeText(context, "Modo GRABACIÓN ACTIVADO: Acerca una etiqueta NFC.", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Modo GRABACIÓN: Acerca etiqueta NFC.", Toast.LENGTH_LONG).show()
                                 },
-                                onWriteCombatNfc = { } // No usado en este diseño simplificado
+                                onWriteCombatNfc = { }
                             )
                         }
 
-                        // --- LECTOR DE FIGURA (VER DETALLES) ---
+                        // 4. LECTOR NFC
                         composable("nfc_read") {
                             NfcReadScreen(
                                 scanEvent = lastScanEvent,
-                                // Acción: Botón "ACTUALIZAR" (Write-back)
                                 onFullCharacterLoaded = { updatedChar ->
                                     pendingCharacterToWrite = updatedChar
-                                    Toast.makeText(context, "Modo ACTUALIZACIÓN: Acerca la misma figura para guardar cambios.", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Modo ACTUALIZACIÓN: Acerca la figura.", Toast.LENGTH_LONG).show()
                                 },
                                 onScanAgainClick = {
                                     lastScanEvent = null
@@ -164,7 +138,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // --- MESA DE COMBATE (NUEVO SISTEMA) ---
+                        // 5. MESA DE COMBATE
                         composable("action_screen") {
                             ActionScreen(
                                 combatList = combatList,
@@ -197,113 +171,69 @@ class MainActivity : ComponentActivity() {
         nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
     }
 
-    // --- LÓGICA CENTRAL DE NFC ---
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-
         if (NfcAdapter.ACTION_TAG_DISCOVERED == intent.action || NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG) ?: return
 
-            // CASO 1: Estamos en MODO ESCRITURA (Grabando o Actualizando)
             if (pendingCharacterToWrite != null) {
                 if (NfcManager.writeCharacterToTag(tag, pendingCharacterToWrite!!)) {
-                    feedback("¡Datos guardados en la figura!")
-                    pendingCharacterToWrite = null // Apagar modo escritura
-                } else {
-                    feedback("Error: No se pudo escribir en el tag.")
-                }
+                    feedback("¡Guardado correctamente!")
+                    pendingCharacterToWrite = null
+                } else feedback("Error al escribir")
                 return
             }
 
-            // CASO 2: Estamos en MESA DE COMBATE -> Añadir figura
             if (isCombatModeActive) {
                 addToCombat(intent, tag)
                 return
             }
 
-            // CASO 3: Lectura Normal (Ir a pantalla de detalle)
             readAndNavigate(intent, tag)
         }
     }
 
-    // Función auxiliar para leer y añadir a la lista de combate
     private fun addToCombat(intent: Intent, tag: Tag) {
-        // Intento 1: Leer formato completo (PlayerCharacter)
         val fullChar = NfcManager.readCharacterFromIntent(intent)
-
         if (fullChar != null) {
-            // Calcular bono de iniciativa (Dex mod)
             val dexMod = (fullChar.dex - 10) / 2
-
-            // Crear estado de batalla (CORREGIDO: Incluye todos los parámetros)
             val newFighter = BattleState(
                 id = fullChar.id,
                 name = fullChar.name,
-                hp = fullChar.hpCurrent,
-                maxHp = fullChar.hpMax,
-                ac = fullChar.ac,
-                status = fullChar.status,
-                initiativeBonus = dexMod,
-
-                // Mapeo de estadísticas
-                str = fullChar.str,
-                dex = fullChar.dex,
-                con = fullChar.con,
-                int = fullChar.int,
-                wis = fullChar.wis,
-                cha = fullChar.cha
+                hp = fullChar.hpCurrent, maxHp = fullChar.hpMax, ac = fullChar.ac,
+                status = fullChar.status, initiativeBonus = dexMod,
+                str = fullChar.str, dex = fullChar.dex, con = fullChar.con,
+                int = fullChar.int, wis = fullChar.wis, cha = fullChar.cha
             )
-
-            // Añadir o Actualizar en la lista
             val idx = combatList.indexOfFirst { it.id == newFighter.id }
             if (idx >= 0) {
-                // Actualizar manteniendo el estado actual de la iniciativa si ya tiró
                 val existing = combatList[idx]
-                combatList[idx] = newFighter.copy(
-                    initiativeTotal = existing.initiativeTotal,
-                    isSelected = existing.isSelected
-                )
+                combatList[idx] = newFighter.copy(initiativeTotal = existing.initiativeTotal, isSelected = existing.isSelected)
                 feedback("Actualizado: ${fullChar.name}")
             } else {
                 combatList.add(newFighter)
                 feedback("Añadido: ${fullChar.name}")
             }
         } else {
-            // Intento 2: Leer formato antiguo (BattleState simple)
             val mini = NfcCombatManager.readTag(tag)
             if (mini != null) {
                 val idx = combatList.indexOfFirst { it.id == mini.id }
-                if (idx >= 0) combatList[idx] = mini // Actualizar
-                else combatList.add(mini) // Añadir
+                if (idx >= 0) combatList[idx] = mini
+                else combatList.add(mini)
                 feedback("Miniatura añadida: ${mini.name}")
-            } else {
-                feedback("No se pudo leer la figura.")
-            }
+            } else feedback("No se pudo leer la figura.")
         }
     }
 
-    // Función auxiliar para lectura normal
     private fun readAndNavigate(intent: Intent, tag: Tag) {
         val char = NfcManager.readCharacterFromIntent(intent)
         if (char != null) {
-            val event = ScanEvent(
-                character = CharacterSheet(char.id, char.name, "${char.race} ${char.charClass}"),
-                fullCharacter = char
-            )
-            // Notificar a la UI
-            if (onNfcScanned != null) {
-                onNfcScanned?.invoke(event)
-            } else {
-                lastScanEvent = event
-            }
+            val event = ScanEvent(CharacterSheet(char.id, char.name, "${char.race} ${char.charClass}"), char)
+            if (onNfcScanned != null) onNfcScanned?.invoke(event) else lastScanEvent = event
             feedback("Figura leída: ${char.name}")
         } else {
             val mini = NfcCombatManager.readTag(tag)
-            if (mini != null) {
-                feedback("Miniatura simple: ${mini.name} (Solo lectura)")
-            } else {
-                feedback("Etiqueta vacía o formato desconocido")
-            }
+            if (mini != null) feedback("Miniatura simple: ${mini.name}") else feedback("Etiqueta vacía")
         }
     }
 

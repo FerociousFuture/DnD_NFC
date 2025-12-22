@@ -13,5 +13,13 @@ data class BattleState(
     var initiativeTotal: Int = 0, // Resultado del dado + bono
 
     // Control de UI
-    var isSelected: Boolean = false // Para seleccionar a quién pegar/curar
+    var isSelected: Boolean = false, // Para seleccionar a quién pegar/curar
+
+    // --- ESTADÍSTICAS (FALTABAN ESTOS CAMPOS) ---
+    val str: Int = 10,
+    val dex: Int = 10,
+    val con: Int = 10,
+    val int: Int = 10,
+    val wis: Int = 10,
+    val cha: Int = 10
 )

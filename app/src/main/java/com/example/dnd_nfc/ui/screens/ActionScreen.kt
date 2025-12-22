@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -27,16 +26,13 @@ import kotlin.random.Random
 @Composable
 fun ActionScreen(
     combatList: List<BattleState>,
-    onUpdateList: (List<BattleState>) -> Unit, // Callback para actualizar la lista principal
+    onUpdateList: (List<BattleState>) -> Unit,
     onResetCombat: () -> Unit
 ) {
-    // FASES: 0 = Preparación (Escanear/Bonos), 1 = Combate (Turnos)
     var combatPhase by remember { mutableIntStateOf(0) }
     var currentTurnIndex by remember { mutableIntStateOf(0) }
-
-    // DIÁLOGOS Y ESTADOS
     var showDiceDialog by remember { mutableStateOf(false) }
-    var showEffectDialog by remember { mutableStateOf(false) } // Para dañar/curar a seleccionados
+    var showEffectDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -53,7 +49,7 @@ fun ActionScreen(
                 },
                 actions = {
                     IconButton(onClick = { showDiceDialog = true }) {
-                        Icon(Icons.Default.Casino, "Dados")
+                        Icon(Icons.Default.Casino, "Tirar Dados")
                     }
                     IconButton(onClick = {
                         combatPhase = 0
@@ -67,9 +63,7 @@ fun ActionScreen(
         },
         bottomBar = {
             if (combatPhase == 1) {
-                // BARRA DE CONTROL DE TURNO
                 BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
-                    // Botón Efectos (Dañar/Curar seleccionados)
                     val selectedCount = combatList.count { it.isSelected }
                     Button(
                         onClick = { showEffectDialog = true },
@@ -79,8 +73,6 @@ fun ActionScreen(
                     ) {
                         Text("Modificar ($selectedCount)")
                     }
-
-                    // Botón Pasar Turno
                     Button(
                         onClick = {
                             if (combatList.isNotEmpty()) {
@@ -98,9 +90,7 @@ fun ActionScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-
             if (combatPhase == 0) {
-                // --- VISTA DE PREPARACIÓN ---
                 Text(
                     "1. Escanea Figuras NFC\n2. Ajusta bonos de iniciativa\n3. ¡Empieza!",
                     modifier = Modifier.padding(16.dp),
@@ -108,26 +98,23 @@ fun ActionScreen(
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall
                 )
-
                 LazyColumn(modifier = Modifier.weight(1f)) {
-                    items(combatList) { char ->
-                        SetupRow(char) { newBonus ->
-                            val updatedList = combatList.map { if (it.id == char.id) it.copy(initiativeBonus = newBonus) else it }
+                    items(combatList.size) { i ->
+                        SetupRow(combatList[i]) { newBonus ->
+                            val updatedList = combatList.toMutableList()
+                            updatedList[i] = updatedList[i].copy(initiativeBonus = newBonus)
                             onUpdateList(updatedList)
                         }
                     }
                 }
-
                 Button(
                     onClick = {
-                        // CALCULAR INICIATIVA
                         val sortedList = combatList.map {
                             val roll = Random.nextInt(1, 21)
                             it.copy(initiativeTotal = roll + it.initiativeBonus)
                         }.sortedByDescending { it.initiativeTotal }
-
                         onUpdateList(sortedList)
-                        combatPhase = 1 // Iniciar combate
+                        combatPhase = 1
                         currentTurnIndex = 0
                     },
                     modifier = Modifier.fillMaxWidth().padding(16.dp).height(56.dp)
@@ -137,15 +124,12 @@ fun ActionScreen(
                     Text("TIRAR INICIATIVA Y EMPEZAR")
                 }
             } else {
-                // --- VISTA DE COMBATE ---
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(combatList.size) { index ->
                         val char = combatList[index]
-                        val isTurn = index == currentTurnIndex
-
                         CombatRow(
                             char = char,
-                            isTurn = isTurn,
+                            isTurn = index == currentTurnIndex,
                             onToggleSelect = {
                                 val updatedList = combatList.toMutableList()
                                 updatedList[index] = char.copy(isSelected = !char.isSelected)
@@ -158,14 +142,11 @@ fun ActionScreen(
         }
     }
 
-    // --- DIÁLOGOS ---
-
-    // 1. DADOS
+    // --- NUEVO DIÁLOGO DE DADOS PERSONALIZADO ---
     if (showDiceDialog) {
         DiceDialog(onDismiss = { showDiceDialog = false })
     }
 
-    // 2. EFECTOS (DAÑO/CURA)
     if (showEffectDialog) {
         EffectDialog(
             onDismiss = { showEffectDialog = false },
@@ -174,7 +155,7 @@ fun ActionScreen(
                     if (char.isSelected) {
                         val newHp = (char.hp + hpChange).coerceIn(0, char.maxHp)
                         val finalStatus = if(newStatus.isNotBlank()) newStatus else char.status
-                        char.copy(hp = newHp, status = finalStatus, isSelected = false) // Deseleccionar al aplicar
+                        char.copy(hp = newHp, status = finalStatus, isSelected = false)
                     } else char
                 }
                 onUpdateList(updatedList)
@@ -184,7 +165,7 @@ fun ActionScreen(
     }
 }
 
-// ================= COMPONENTES VISUALES =================
+// --- COMPONENTES AUXILIARES ---
 
 @Composable
 fun SetupRow(char: BattleState, onBonusChange: (Int) -> Unit) {
@@ -194,7 +175,7 @@ fun SetupRow(char: BattleState, onBonusChange: (Int) -> Unit) {
                 Text(char.name, fontWeight = FontWeight.Bold)
                 Text("HP: ${char.hp}/${char.maxHp}", style = MaterialTheme.typography.bodySmall)
             }
-            Text("Bono Inic:", style = MaterialTheme.typography.bodySmall)
+            Text("Bono:", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.width(8.dp))
             OutlinedTextField(
                 value = "${char.initiativeBonus}",
@@ -221,19 +202,14 @@ fun CombatRow(char: BattleState, isTurn: Boolean, onToggleSelect: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = bgColor)
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Iniciativa
             Box(Modifier.size(32.dp).background(Color.LightGray, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) {
                 Text("${char.initiativeTotal}", fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(12.dp))
-
-            // Datos
             Column(Modifier.weight(1f)) {
                 Text(char.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Text("Estado: ${char.status}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
-
-            // Vida
             Column(horizontalAlignment = Alignment.End) {
                 Text("${char.hp} / ${char.maxHp} HP", fontWeight = FontWeight.Bold, color = if(char.hp < char.maxHp/2) Color.Red else Color.Green)
                 if (char.isSelected) Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
@@ -242,24 +218,75 @@ fun CombatRow(char: BattleState, isTurn: Boolean, onToggleSelect: () -> Unit) {
     }
 }
 
+// === DIÁLOGO DE DADOS CORREGIDO ===
 @Composable
 fun DiceDialog(onDismiss: () -> Unit) {
-    var result by remember { mutableStateOf("") }
+    var count by remember { mutableStateOf("1") }
+    var faces by remember { mutableStateOf("20") }
+    var bonus by remember { mutableStateOf("0") }
+    var resultText by remember { mutableStateOf("") }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Lanzador de Dados") },
+        title = { Text("Tirada Personalizada") },
         text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text(result, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Fila de Entradas
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // CANTIDAD
+                    OutlinedTextField(
+                        value = count,
+                        onValueChange = { if(it.all { c -> c.isDigit() }) count = it },
+                        label = { Text("#") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    // CARAS
+                    OutlinedTextField(
+                        value = faces,
+                        onValueChange = { if(it.all { c -> c.isDigit() }) faces = it },
+                        label = { Text("d") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    // BONO
+                    OutlinedTextField(
+                        value = bonus,
+                        onValueChange = { if(it.all { c -> c.isDigit() || c == '-' }) bonus = it },
+                        label = { Text("+") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                }
+
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { result = "${Random.nextInt(1, 21)}" }) { Text("d20") }
-                    Button(onClick = { result = "${Random.nextInt(1, 9) + Random.nextInt(1, 9)}" }) { Text("2d8") } // Ejemplo
-                    Button(onClick = { result = "${Random.nextInt(1, 7)}" }) { Text("d6") }
+
+                // Resultado en grande
+                if (resultText.isNotEmpty()) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(resultText, style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+        confirmButton = {
+            Button(onClick = {
+                val c = count.toIntOrNull() ?: 1
+                val f = faces.toIntOrNull() ?: 20
+                val b = bonus.toIntOrNull() ?: 0
+
+                var total = 0
+                repeat(c) {
+                    total += Random.nextInt(1, f + 1)
+                }
+                val final = total + b
+                resultText = "$final"
+            }) { Text("TIRAR") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
     )
 }
 
@@ -270,25 +297,21 @@ fun EffectDialog(onDismiss: () -> Unit, onApply: (Int, String) -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Aplicar Efecto a Seleccionados") },
+        title = { Text("Aplicar Efecto") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Cambio de Vida (Usa - para daño, + para cura):")
+                Text("Vida (+Cura / -Daño):")
                 OutlinedTextField(
                     value = damageInput,
                     onValueChange = { damageInput = it },
                     placeholder = { Text("-5") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
-                Text("Nuevo Estado (dejar vacío para no cambiar):")
+                Text("Estado:")
                 OutlinedTextField(value = statusInput, onValueChange = { statusInput = it }, placeholder = { Text("Derribado") })
             }
         },
-        confirmButton = {
-            Button(onClick = {
-                onApply(damageInput.toIntOrNull() ?: 0, statusInput)
-            }) { Text("Aplicar") }
-        },
+        confirmButton = { Button(onClick = { onApply(damageInput.toIntOrNull() ?: 0, statusInput) }) { Text("Aplicar") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }

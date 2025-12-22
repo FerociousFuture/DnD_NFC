@@ -1,18 +1,25 @@
 package com.example.dnd_nfc.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape // <--- IMPORT QUE FALTABA
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.dnd_nfc.data.local.CharacterManager // <--- Nuevo Import
+import com.example.dnd_nfc.data.local.CharacterManager
 import com.example.dnd_nfc.data.model.PlayerCharacter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -21,99 +28,120 @@ fun CharacterListScreen(
     onCharacterClick: (PlayerCharacter) -> Unit,
     onNewCharacterClick: () -> Unit
 ) {
-    val context = LocalContext.current // Necesario para leer archivos
-    var characters by remember { mutableStateOf<List<PlayerCharacter>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    var characterList by remember { mutableStateOf(listOf<PlayerCharacter>()) }
 
-    // Dialogo de borrado
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var charToDelete by remember { mutableStateOf<PlayerCharacter?>(null) }
-
-    // CARGA DE DATOS (LOCAL)
-    // Usamos LaunchedEffect para recargar la lista cada vez que volvemos a esta pantalla
+    // Cargar lista al iniciar
     LaunchedEffect(Unit) {
-        isLoading = true
-        characters = CharacterManager.getCharacters(context)
-        isLoading = false
+        // CORRECCIÓN AQUÍ: Usamos getCharacters (el nombre real en CharacterManager)
+        characterList = CharacterManager.getCharacters(context)
     }
 
     Scaffold(
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onNewCharacterClick,
-                icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("Crear Héroe") }
-            )
+            FloatingActionButton(onClick = onNewCharacterClick) {
+                Icon(Icons.Default.Add, contentDescription = "Nueva Figura")
+            }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-            Text(
-                "Mis Personajes (Local)",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Text("Biblioteca de Figuras", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(16.dp))
 
-            if (isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else if (characters.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No hay personajes. ¡Crea uno!", color = MaterialTheme.colorScheme.secondary)
+            if (characterList.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No hay figuras guardadas.", color = Color.Gray)
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 16.dp)
-                ) {
-                    items(characters) { char ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onCharacterClick(char) },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(16.dp)
-                                    .fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(char.name.ifEmpty { "Sin Nombre" }, style = MaterialTheme.typography.titleMedium)
-                                    Text("Nivel ${char.level} | ${char.race} ${char.charClass}", style = MaterialTheme.typography.bodyMedium)
-                                }
-                                IconButton(onClick = { charToDelete = char; showDeleteDialog = true }) {
-                                    Icon(Icons.Default.Delete, "Borrar", tint = MaterialTheme.colorScheme.error)
-                                }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(characterList) { char ->
+                        CharacterCard(
+                            character = char,
+                            onClick = { onCharacterClick(char) },
+                            onDelete = {
+                                CharacterManager.deleteCharacter(context, char.id)
+                                // Recargar lista tras borrar
+                                characterList = CharacterManager.getCharacters(context)
                             }
-                        }
+                        )
                     }
                 }
             }
         }
+    }
+}
 
-        // ALERTA DE BORRADO
-        if (showDeleteDialog && charToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { showDeleteDialog = false },
-                title = { Text("¿Eliminar Personaje?") },
-                text = { Text("Se borrará a ${charToDelete!!.name} de la memoria del teléfono.") },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val id = charToDelete!!.id
-                            CharacterManager.deleteCharacter(context, id) // Borrado Local
-                            // Recargamos la lista
-                            characters = CharacterManager.getCharacters(context)
-                            showDeleteDialog = false
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Text("Borrar") }
-                },
-                dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancelar") } }
-            )
+@Composable
+fun CharacterCard(
+    character: PlayerCharacter,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Círculo con la inicial
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = character.name.take(1).uppercase(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(character.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("${character.race} ${character.charClass}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // --- MOSTRAR STATS EN LUGAR DE NIVEL ---
+                Row {
+                    BadgeInfo("AC: ${character.ac}")
+                    Spacer(Modifier.width(8.dp))
+                    BadgeInfo("HP: ${character.hpCurrent}/${character.hpMax}")
+
+                    if (character.status.isNotEmpty() && character.status != "Normal") {
+                        Spacer(Modifier.width(8.dp))
+                        BadgeInfo(character.status, Color(0xFFFFE0E0), Color.Red)
+                    }
+                }
+            }
+
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Borrar", tint = Color.Gray)
+            }
         }
+    }
+}
+
+@Composable
+fun BadgeInfo(text: String, containerColor: Color = Color.LightGray.copy(alpha = 0.3f), textColor: Color = Color.Black) {
+    Surface(
+        shape = RoundedCornerShape(4.dp), // <--- ESTO DABA ERROR ANTES DE IMPORTARLO
+        color = containerColor,
+        modifier = Modifier.padding(top = 2.dp)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = textColor
+        )
     }
 }
