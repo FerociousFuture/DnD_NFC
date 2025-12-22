@@ -7,7 +7,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -29,7 +28,6 @@ fun MainMenuScreen(
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // 1. BIBLIOTECA
         Button(
             onClick = onNavigateToCharacters,
             modifier = Modifier.fillMaxWidth().height(60.dp),
@@ -42,13 +40,12 @@ fun MainMenuScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 2. MESA DE COMBATE
         Button(
             onClick = onNavigateToCombat,
             modifier = Modifier.fillMaxWidth().height(70.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            // CORRECCIÓN AQUÍ: Usamos FlashOn en lugar de Swords
+            // CORRECCIÓN: Usamos FlashOn (Rayo) en lugar de Swords
             Icon(Icons.Default.FlashOn, null, modifier = Modifier.size(32.dp))
             Spacer(Modifier.width(16.dp))
             Column {
@@ -59,7 +56,6 @@ fun MainMenuScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 3. NUEVA FIGURA
         OutlinedButton(onClick = onNavigateToNewCharacter, modifier = Modifier.fillMaxWidth().height(60.dp)) {
             Icon(Icons.Default.Add, null)
             Spacer(Modifier.width(16.dp))

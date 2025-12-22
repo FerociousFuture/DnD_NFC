@@ -22,41 +22,54 @@ import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.model.BattleState
 import kotlin.random.Random
 
+// Definimos acciones para MainActivity
+sealed class CombatAction {
+    data class SkillCheck(val attribute: String, val dc: Int, val bonus: Int) : CombatAction()
+    data class Attack(val diceCount: Int, val diceFaces: Int, val bonus: Int) : CombatAction()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActionScreen(
     combatList: List<BattleState>,
     onUpdateList: (List<BattleState>) -> Unit,
-    onResetCombat: () -> Unit
+    onResetCombat: () -> Unit,
+    onTriggerAction: (CombatAction) -> Unit
 ) {
     var combatPhase by remember { mutableIntStateOf(0) }
     var currentTurnIndex by remember { mutableIntStateOf(0) }
     var showDiceDialog by remember { mutableStateOf(false) }
     var showEffectDialog by remember { mutableStateOf(false) }
+    var showActionDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    if (combatPhase == 0) Text("Preparación")
-                    else {
-                        val activeName = if(combatList.isNotEmpty()) combatList[currentTurnIndex].name else "Nadie"
+                    if (combatPhase == 0) {
+                        Text(text = "Preparación")
+                    } else {
+                        val activeName = if (combatList.isNotEmpty()) combatList[currentTurnIndex].name else "Nadie"
                         Column {
-                            Text("En Turno:", style = MaterialTheme.typography.labelSmall)
-                            Text(activeName, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(text = "En Turno:", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                text = activeName,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 },
                 actions = {
                     IconButton(onClick = { showDiceDialog = true }) {
-                        Icon(Icons.Default.Casino, "Tirar Dados")
+                        Icon(Icons.Default.Casino, contentDescription = "Tirar Dados")
                     }
                     IconButton(onClick = {
                         combatPhase = 0
                         currentTurnIndex = 0
                         onResetCombat()
                     }) {
-                        Icon(Icons.Default.Refresh, "Reiniciar")
+                        Icon(Icons.Default.Refresh, contentDescription = "Reiniciar")
                     }
                 }
             )
@@ -69,9 +82,11 @@ fun ActionScreen(
                         onClick = { showEffectDialog = true },
                         enabled = selectedCount > 0,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.weight(1f).padding(8.dp)
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(8.dp)
                     ) {
-                        Text("Modificar ($selectedCount)")
+                        Text(text = "Modificar ($selectedCount)")
                     }
                     Button(
                         onClick = {
@@ -79,24 +94,30 @@ fun ActionScreen(
                                 currentTurnIndex = (currentTurnIndex + 1) % combatList.size
                             }
                         },
-                        modifier = Modifier.weight(1f).padding(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Siguiente Turno")
-                        Icon(Icons.Default.SkipNext, null)
+                        Text(text = "Siguiente Turno")
+                        Icon(Icons.Default.SkipNext, contentDescription = null)
                     }
                 }
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+        ) {
             if (combatPhase == 0) {
+                // FASE 0: PREPARACIÓN
                 Text(
-                    "1. Escanea Figuras NFC\n2. Ajusta bonos de iniciativa\n3. ¡Empieza!",
+                    text = "1. Escanea Figuras NFC\n2. Ajusta bonos de iniciativa\n3. ¡Empieza!",
                     modifier = Modifier.padding(16.dp),
                     color = Color.Gray,
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodySmall
+                    textAlign = TextAlign.Center
                 )
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(combatList.size) { i ->
@@ -110,20 +131,23 @@ fun ActionScreen(
                 Button(
                     onClick = {
                         val sortedList = combatList.map {
-                            val roll = Random.nextInt(1, 21)
-                            it.copy(initiativeTotal = roll + it.initiativeBonus)
+                            it.copy(initiativeTotal = Random.nextInt(1, 21) + it.initiativeBonus)
                         }.sortedByDescending { it.initiativeTotal }
                         onUpdateList(sortedList)
                         combatPhase = 1
                         currentTurnIndex = 0
                     },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp).height(56.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .height(56.dp)
                 ) {
-                    Icon(Icons.Default.PlayArrow, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("TIRAR INICIATIVA Y EMPEZAR")
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "TIRAR INICIATIVA")
                 }
             } else {
+                // FASE 1: COMBATE
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(combatList.size) { index ->
                         val char = combatList[index]
@@ -134,7 +158,8 @@ fun ActionScreen(
                                 val updatedList = combatList.toMutableList()
                                 updatedList[index] = char.copy(isSelected = !char.isSelected)
                                 onUpdateList(updatedList)
-                            }
+                            },
+                            onActionClick = { showActionDialog = true }
                         )
                     }
                 }
@@ -142,7 +167,7 @@ fun ActionScreen(
         }
     }
 
-    // --- NUEVO DIÁLOGO DE DADOS PERSONALIZADO ---
+    // --- DIÁLOGOS ---
     if (showDiceDialog) {
         DiceDialog(onDismiss = { showDiceDialog = false })
     }
@@ -150,168 +175,368 @@ fun ActionScreen(
     if (showEffectDialog) {
         EffectDialog(
             onDismiss = { showEffectDialog = false },
-            onApply = { hpChange, newStatus ->
-                val updatedList = combatList.map { char ->
-                    if (char.isSelected) {
-                        val newHp = (char.hp + hpChange).coerceIn(0, char.maxHp)
-                        val finalStatus = if(newStatus.isNotBlank()) newStatus else char.status
-                        char.copy(hp = newHp, status = finalStatus, isSelected = false)
-                    } else char
+            onApply = { hp, st ->
+                val updatedList = combatList.map {
+                    if (it.isSelected) it.copy(
+                        hp = (it.hp + hp).coerceIn(0, it.maxHp),
+                        status = if (st.isNotBlank()) st else it.status,
+                        isSelected = false
+                    ) else it
                 }
                 onUpdateList(updatedList)
                 showEffectDialog = false
             }
         )
     }
+
+    // NUEVO: DIÁLOGO DE ACCIÓN
+    if (showActionDialog) {
+        ActionSelectionDialog(
+            onDismiss = { showActionDialog = false },
+            onActionSelected = { action ->
+                onTriggerAction(action)
+                showActionDialog = false
+            }
+        )
+    }
 }
 
-// --- COMPONENTES AUXILIARES ---
+@Composable
+fun CombatRow(
+    char: BattleState,
+    isTurn: Boolean,
+    onToggleSelect: () -> Unit,
+    onActionClick: () -> Unit
+) {
+    val borderColor = if (isTurn) MaterialTheme.colorScheme.primary else Color.Transparent
+    val borderWidth = if (isTurn) 3.dp else 0.dp
+
+    Card(
+        modifier = Modifier
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .fillMaxWidth()
+            .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
+            .clickable { onToggleSelect() },
+        elevation = CardDefaults.cardElevation(if (isTurn) 8.dp else 2.dp)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(Color.LightGray, RoundedCornerShape(4.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "${char.initiativeTotal}", fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = char.name,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "Estado: ${char.status}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    val hpColor = if (char.hp < char.maxHp / 2) Color.Red else Color.Green
+                    Text(
+                        text = "${char.hp} / ${char.maxHp} HP",
+                        fontWeight = FontWeight.Bold,
+                        color = hpColor
+                    )
+                    if (char.isSelected) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            if (isTurn) {
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onActionClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                ) {
+                    Icon(Icons.Default.FlashOn, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = "REALIZAR ACCIÓN")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ActionSelectionDialog(onDismiss: () -> Unit, onActionSelected: (CombatAction) -> Unit) {
+    var tabIndex by remember { mutableIntStateOf(0) }
+    var skillStat by remember { mutableStateOf("FUE") }
+    var skillBonus by remember { mutableStateOf("0") }
+    var attDiceCount by remember { mutableStateOf("1") }
+    var attDiceFace by remember { mutableStateOf("8") }
+    var attBonus by remember { mutableStateOf("3") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = "Elegir Acción") },
+        text = {
+            Column {
+                TabRow(selectedTabIndex = tabIndex) {
+                    Tab(
+                        selected = tabIndex == 0,
+                        onClick = { tabIndex = 0 },
+                        text = { Text(text = "Prueba") }
+                    )
+                    Tab(
+                        selected = tabIndex == 1,
+                        onClick = { tabIndex = 1 },
+                        text = { Text(text = "Ataque") }
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                if (tabIndex == 0) {
+                    Text(text = "Hacer prueba de habilidad:")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val stats = listOf("FUE", "DES", "CON", "INT", "SAB", "CAR")
+                        var expanded by remember { mutableStateOf(false) }
+                        Box(Modifier.weight(1f)) {
+                            OutlinedButton(
+                                onClick = { expanded = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(text = skillStat)
+                            }
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                stats.forEach { s ->
+                                    DropdownMenuItem(
+                                        text = { Text(text = s) },
+                                        onClick = {
+                                            skillStat = s
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = skillBonus,
+                        onValueChange = {
+                            if (it.all { c -> c.isDigit() || c == '-' }) skillBonus = it
+                        },
+                        label = { Text(text = "Bono Extra") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Text(
+                        text = "Acerca la figura para tirar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                } else {
+                    Text(text = "Atacar a un objetivo:")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = attDiceCount,
+                            onValueChange = { attDiceCount = it },
+                            label = { Text(text = "#") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        Text(text = "d")
+                        OutlinedTextField(
+                            value = attDiceFace,
+                            onValueChange = { attDiceFace = it },
+                            label = { Text(text = "Caras") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        Text(text = "+")
+                        OutlinedTextField(
+                            value = attBonus,
+                            onValueChange = { attBonus = it },
+                            label = { Text(text = "Bono") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                    Text(
+                        text = "Acerca la figura ENEMIGA para aplicar daño.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                if (tabIndex == 0) {
+                    onActionSelected(
+                        CombatAction.SkillCheck(
+                            skillStat,
+                            15,
+                            skillBonus.toIntOrNull() ?: 0
+                        )
+                    )
+                } else {
+                    onActionSelected(
+                        CombatAction.Attack(
+                            attDiceCount.toIntOrNull() ?: 1,
+                            attDiceFace.toIntOrNull() ?: 8,
+                            attBonus.toIntOrNull() ?: 0
+                        )
+                    )
+                }
+            }) {
+                val buttonText = if (tabIndex == 0) "ESCANEAR HÉROE" else "ESCANEAR OBJETIVO"
+                Text(text = buttonText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancelar")
+            }
+        }
+    )
+}
 
 @Composable
 fun SetupRow(char: BattleState, onBonusChange: (Int) -> Unit) {
     Card(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(Modifier.weight(1f)) {
-                Text(char.name, fontWeight = FontWeight.Bold)
-                Text("HP: ${char.hp}/${char.maxHp}", style = MaterialTheme.typography.bodySmall)
+                Text(text = char.name, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "HP: ${char.hp}/${char.maxHp}",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
-            Text("Bono:", style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.width(8.dp))
             OutlinedTextField(
                 value = "${char.initiativeBonus}",
                 onValueChange = { onBonusChange(it.toIntOrNull() ?: 0) },
                 modifier = Modifier.width(60.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
         }
     }
 }
 
 @Composable
-fun CombatRow(char: BattleState, isTurn: Boolean, onToggleSelect: () -> Unit) {
-    val borderColor = if (isTurn) MaterialTheme.colorScheme.primary else Color.Transparent
-    val bgColor = if (char.isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-
-    Card(
-        modifier = Modifier
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .fillMaxWidth()
-            .border(2.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable { onToggleSelect() },
-        colors = CardDefaults.cardColors(containerColor = bgColor)
-    ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(32.dp).background(Color.LightGray, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) {
-                Text("${char.initiativeTotal}", fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(char.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text("Estado: ${char.status}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("${char.hp} / ${char.maxHp} HP", fontWeight = FontWeight.Bold, color = if(char.hp < char.maxHp/2) Color.Red else Color.Green)
-                if (char.isSelected) Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-            }
-        }
-    }
-}
-
-// === DIÁLOGO DE DADOS CORREGIDO ===
-@Composable
 fun DiceDialog(onDismiss: () -> Unit) {
-    var count by remember { mutableStateOf("1") }
-    var faces by remember { mutableStateOf("20") }
-    var bonus by remember { mutableStateOf("0") }
-    var resultText by remember { mutableStateOf("") }
+    var c by remember { mutableStateOf("1") }
+    var f by remember { mutableStateOf("20") }
+    var b by remember { mutableStateOf("0") }
+    var res by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Tirada Personalizada") },
+        title = { Text(text = "Dados") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Fila de Entradas
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // CANTIDAD
+            Column {
+                Row {
                     OutlinedTextField(
-                        value = count,
-                        onValueChange = { if(it.all { c -> c.isDigit() }) count = it },
-                        label = { Text("#") },
+                        value = c,
+                        onValueChange = { c = it },
                         modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
+                        label = { Text(text = "#") }
                     )
-                    // CARAS
+                    Text(text = "d", modifier = Modifier.align(Alignment.CenterVertically))
                     OutlinedTextField(
-                        value = faces,
-                        onValueChange = { if(it.all { c -> c.isDigit() }) faces = it },
-                        label = { Text("d") },
+                        value = f,
+                        onValueChange = { f = it },
                         modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
+                        label = { Text(text = "Caras") }
                     )
-                    // BONO
+                    Text(text = "+", modifier = Modifier.align(Alignment.CenterVertically))
                     OutlinedTextField(
-                        value = bonus,
-                        onValueChange = { if(it.all { c -> c.isDigit() || c == '-' }) bonus = it },
-                        label = { Text("+") },
+                        value = b,
+                        onValueChange = { b = it },
                         modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
+                        label = { Text(text = "Bono") }
                     )
                 }
-
-                Spacer(Modifier.height(16.dp))
-
-                // Resultado en grande
-                if (resultText.isNotEmpty()) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(resultText, style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    }
+                if (res.isNotEmpty()) {
+                    Text(
+                        text = res,
+                        style = MaterialTheme.typography.displayMedium,
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .padding(top = 16.dp)
+                    )
                 }
             }
         },
         confirmButton = {
             Button(onClick = {
-                val c = count.toIntOrNull() ?: 1
-                val f = faces.toIntOrNull() ?: 20
-                val b = bonus.toIntOrNull() ?: 0
-
-                var total = 0
-                repeat(c) {
-                    total += Random.nextInt(1, f + 1)
+                var t = 0
+                repeat(c.toIntOrNull() ?: 1) {
+                    t += Random.nextInt(1, (f.toIntOrNull() ?: 20) + 1)
                 }
-                val final = total + b
-                resultText = "$final"
-            }) { Text("TIRAR") }
+                res = "${t + (b.toIntOrNull() ?: 0)}"
+            }) {
+                Text(text = "Tirar")
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cerrar")
+            }
+        }
     )
 }
 
 @Composable
 fun EffectDialog(onDismiss: () -> Unit, onApply: (Int, String) -> Unit) {
-    var damageInput by remember { mutableStateOf("") }
-    var statusInput by remember { mutableStateOf("") }
+    var hp by remember { mutableStateOf("") }
+    var st by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Aplicar Efecto") },
+        title = { Text(text = "Efecto") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Vida (+Cura / -Daño):")
+            Column {
                 OutlinedTextField(
-                    value = damageInput,
-                    onValueChange = { damageInput = it },
-                    placeholder = { Text("-5") },
+                    value = hp,
+                    onValueChange = { hp = it },
+                    label = { Text(text = "HP (+/-)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
-                Text("Estado:")
-                OutlinedTextField(value = statusInput, onValueChange = { statusInput = it }, placeholder = { Text("Derribado") })
+                OutlinedTextField(
+                    value = st,
+                    onValueChange = { st = it },
+                    label = { Text(text = "Estado") }
+                )
             }
         },
-        confirmButton = { Button(onClick = { onApply(damageInput.toIntOrNull() ?: 0, statusInput) }) { Text("Aplicar") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        confirmButton = {
+            Button(onClick = { onApply(hp.toIntOrNull() ?: 0, st) }) {
+                Text(text = "Aplicar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancelar")
+            }
+        }
     )
 }

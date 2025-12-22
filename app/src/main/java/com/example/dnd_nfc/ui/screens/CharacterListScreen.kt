@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape // <--- IMPORT QUE FALTABA
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -31,9 +31,7 @@ fun CharacterListScreen(
     val context = LocalContext.current
     var characterList by remember { mutableStateOf(listOf<PlayerCharacter>()) }
 
-    // Cargar lista al iniciar
     LaunchedEffect(Unit) {
-        // CORRECCIÓN AQUÍ: Usamos getCharacters (el nombre real en CharacterManager)
         characterList = CharacterManager.getCharacters(context)
     }
 
@@ -60,7 +58,6 @@ fun CharacterListScreen(
                             onClick = { onCharacterClick(char) },
                             onDelete = {
                                 CharacterManager.deleteCharacter(context, char.id)
-                                // Recargar lista tras borrar
                                 characterList = CharacterManager.getCharacters(context)
                             }
                         )
@@ -72,11 +69,7 @@ fun CharacterListScreen(
 }
 
 @Composable
-fun CharacterCard(
-    character: PlayerCharacter,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
+fun CharacterCard(character: PlayerCharacter, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
         elevation = CardDefaults.cardElevation(4.dp)
@@ -85,43 +78,32 @@ fun CharacterCard(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Círculo con la inicial
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = character.name.take(1).uppercase(),
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    fontWeight = FontWeight.Bold
                 )
             }
-
             Spacer(modifier = Modifier.width(16.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(character.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("${character.race} ${character.charClass}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-
                 Spacer(modifier = Modifier.height(4.dp))
-
-                // --- MOSTRAR STATS EN LUGAR DE NIVEL ---
+                // Muestra AC y HP en vez de Nivel
                 Row {
                     BadgeInfo("AC: ${character.ac}")
                     Spacer(Modifier.width(8.dp))
                     BadgeInfo("HP: ${character.hpCurrent}/${character.hpMax}")
-
                     if (character.status.isNotEmpty() && character.status != "Normal") {
                         Spacer(Modifier.width(8.dp))
                         BadgeInfo(character.status, Color(0xFFFFE0E0), Color.Red)
                     }
                 }
             }
-
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Borrar", tint = Color.Gray)
             }
@@ -131,17 +113,7 @@ fun CharacterCard(
 
 @Composable
 fun BadgeInfo(text: String, containerColor: Color = Color.LightGray.copy(alpha = 0.3f), textColor: Color = Color.Black) {
-    Surface(
-        shape = RoundedCornerShape(4.dp), // <--- ESTO DABA ERROR ANTES DE IMPORTARLO
-        color = containerColor,
-        modifier = Modifier.padding(top = 2.dp)
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = textColor
-        )
+    Surface(shape = RoundedCornerShape(4.dp), color = containerColor, modifier = Modifier.padding(top = 2.dp)) {
+        Text(text = text, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = textColor)
     }
 }
