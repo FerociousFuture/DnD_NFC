@@ -1,6 +1,7 @@
 package com.example.dnd_nfc.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -27,11 +29,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.local.CharacterManager
+import com.example.dnd_nfc.data.local.DataCompressor
 import com.example.dnd_nfc.data.model.Attack
 import com.example.dnd_nfc.data.model.BattleState
 import com.example.dnd_nfc.data.model.InventoryItem
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.Spell
+import com.example.dnd_nfc.utils.QrCodeHelper
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,7 +44,7 @@ fun CharacterSheetScreen(
     characterId: String? = null,
     existingCharacter: PlayerCharacter? = null,
     onBack: () -> Unit,
-    onWriteNfc: (PlayerCharacter) -> Unit, // Guardar Backup Completo
+    onWriteNfc: (PlayerCharacter) -> Unit, // Se mantiene por compatibilidad, aunque ahora usamos QR
     onWriteCombatNfc: (BattleState) -> Unit // Crear Figura de Combate
 ) {
     val context = LocalContext.current
@@ -50,6 +54,10 @@ fun CharacterSheetScreen(
 
     // Estados para control de flujo
     var showSaveDialog by remember { mutableStateOf(false) }
+
+    // ESTADOS PARA QR
+    var showQrDialog by remember { mutableStateOf(false) }
+    var qrBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     val tabs = listOf("General", "Combate", "Magia", "Equipo", "Rasgos")
     val icons = listOf(
@@ -74,7 +82,6 @@ fun CharacterSheetScreen(
                     // BOTÓN 1: MODO COMBATE (Rayo) - Inicializar Miniatura estilo "Skylander"
                     if (charData.id.isNotEmpty()) {
                         IconButton(onClick = {
-                            // CORRECCIÓN AQUI:
                             // Calculamos el modificador de destreza para la iniciativa automática
                             val dexMod = (charData.dex - 10) / 2
 
@@ -84,7 +91,7 @@ fun CharacterSheetScreen(
                                 hp = charData.hpCurrent,
                                 maxHp = charData.hpMax,
                                 ac = charData.ac,
-                                initiativeMod = dexMod // Usamos el modificador, no el valor total
+                                initiativeMod = dexMod // Usamos el modificador para la tirada automática
                             )
                             onWriteCombatNfc(battleState)
                         }, enabled = isFormValid) {
@@ -92,9 +99,17 @@ fun CharacterSheetScreen(
                         }
                     }
 
-                    // BOTÓN 2: MODO BACKUP (Icono NFC) - Guardar Ficha Completa
-                    IconButton(onClick = { onWriteNfc(charData) }, enabled = isFormValid) {
-                        Icon(Icons.Default.Nfc, "Backup NFC", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
+                    // BOTÓN 2: MODO BACKUP QR (Icono QR) - Generar Código
+                    IconButton(onClick = {
+                        val compressedData = DataCompressor.compress(charData)
+                        if (compressedData != null) {
+                            qrBitmap = QrCodeHelper.generateQrBitmap(compressedData)
+                            if (qrBitmap != null) {
+                                showQrDialog = true
+                            }
+                        }
+                    }, enabled = isFormValid) {
+                        Icon(Icons.Default.QrCode, "Backup QR", tint = if (isFormValid) MaterialTheme.colorScheme.onSurface else Color.Gray)
                     }
 
                     // BOTÓN 3: GUARDAR LOCAL (Disco)
@@ -136,6 +151,31 @@ fun CharacterSheetScreen(
                 4 -> FeaturesTab(charData) { charData = it }
             }
         }
+    }
+
+    // --- DIÁLOGO QR ---
+    if (showQrDialog && qrBitmap != null) {
+        AlertDialog(
+            onDismissRequest = { showQrDialog = false },
+            title = { Text("Respaldo QR", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Escanea este código desde otro dispositivo para copiar el personaje.", textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Image(
+                        bitmap = qrBitmap!!.asImageBitmap(),
+                        contentDescription = "QR Code",
+                        modifier = Modifier.size(250.dp).border(1.dp, Color.Black)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQrDialog = false }) { Text("Cerrar") }
+            }
+        )
     }
 
     // --- DIÁLOGO DE CONFIRMACIÓN DE GUARDADO (LOCAL) ---

@@ -90,4 +90,8 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     implementation("com.google.zxing:core:3.5.1")
+
+    // Añadir estas dos para QR:
+    implementation("com.google.zxing:core:3.5.2") // Para generar
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0") // Para escanear
 }

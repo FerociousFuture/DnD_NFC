@@ -80,13 +80,27 @@ class MainActivity : ComponentActivity() {
                     NavHost(navController = navController, startDestination = "main_menu") {
                         // ... (Main Menu, Character List, Character Sheet, Nfc Read IGUAL QUE ANTES) ...
                         composable("main_menu") {
-                            ResetWriteModes()
-                            MainMenuScreen(
-                                onNavigateToCharacters = { navController.navigate("character_list") },
-                                onNavigateToCampaigns = { navController.navigate("campaign_list") },
-                                onNavigateToCombat = { navController.navigate("action_screen") }
-                            )
-                        }
+                            // Reset de modos previos
+                            DisposableEffect(Unit) {
+                                currentAttackRequest = null
+                                pendingCharacterToWrite = null
+                                pendingBattleStateToWrite = null
+                                onDispose { }
+                            }
+
+                            composable("main_menu") {
+                                ResetWriteModes()
+                                MainMenuScreen(
+                                    onNavigateToCharacters = { navController.navigate("character_list") },
+                                    onNavigateToCampaigns = { navController.navigate("campaign_list") },
+                                    onNavigateToCombat = { navController.navigate("action_screen") },
+                                    // ESTA ES LA PARTE QUE FALTA:
+                                    onCharacterImported = { importedChar ->
+                                        CharacterManager.saveCharacter(context, importedChar)
+                                        navController.navigate("character_sheet/${importedChar.id}")
+                                    }
+                                )
+                            }
 
                         composable("character_list") {
                             ResetWriteModes()

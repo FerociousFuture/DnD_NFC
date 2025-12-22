@@ -1,28 +1,54 @@
 package com.example.dnd_nfc.ui.screens
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.dnd_nfc.data.local.DataCompressor
+import com.example.dnd_nfc.data.model.PlayerCharacter
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 @Composable
 fun MainMenuScreen(
     onNavigateToCharacters: () -> Unit,
     onNavigateToCampaigns: () -> Unit,
-    onNavigateToCombat: () -> Unit // Nuevo: Directo al combate local
+    onNavigateToCombat: () -> Unit,
+    onCharacterImported: (PlayerCharacter) -> Unit // Nuevo Callback
 ) {
+    val context = LocalContext.current
+
+    // Lanzador de la cámara para escanear QR
+    val qrLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        if (result.contents != null) {
+            val qrContent = result.contents
+            try {
+                // Descomprimimos usando tu DataCompressor
+                val character = DataCompressor.decompress(qrContent)
+                if (character != null) {
+                    Toast.makeText(context, "¡Personaje detectado: ${character.name}!", Toast.LENGTH_SHORT).show()
+                    onCharacterImported(character)
+                } else {
+                    Toast.makeText(context, "Error: Datos QR inválidos o dañados.", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error al leer QR: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -31,50 +57,50 @@ fun MainMenuScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = "D&D NFC",
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Gestor Offline",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.secondary
-        )
+        Text("D&D NFC", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        Text("Gestor Offline", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.secondary)
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // GESTIÓN
         MenuCard("Mis Personajes", "Fichas e Inventario", Icons.Default.Description, onNavigateToCharacters)
         Spacer(modifier = Modifier.height(16.dp))
         MenuCard("Mis Campañas", "Bitácora y Notas", Icons.Default.Groups, onNavigateToCampaigns)
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ZONA DE ACCIÓN
-        Text("Herramientas", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.tertiary)
+        // BOTÓN ESCANEAR QR (NUEVO)
+        Button(
+            onClick = {
+                val options = ScanOptions()
+                options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                options.setPrompt("Escanea el QR del personaje")
+                options.setBeepEnabled(true)
+                options.setOrientationLocked(false)
+                qrLauncher.launch(options)
+            },
+            modifier = Modifier.fillMaxWidth().height(60.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+        ) {
+            Icon(Icons.Default.QrCodeScanner, null)
+            Spacer(Modifier.width(8.dp))
+            Text("Escanear Respaldo QR")
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Botón Combate
         Button(
             onClick = onNavigateToCombat,
-            modifier = Modifier.fillMaxWidth().height(70.dp),
+            modifier = Modifier.fillMaxWidth().height(60.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
             shape = MaterialTheme.shapes.medium
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Casino, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
                 Spacer(Modifier.width(16.dp))
-                Text(
-                    "Mesa de Combate (Dados & NFC)",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
+                Text("Mesa de Combate", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
             }
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Modo Local Activo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
     }
 }
 
