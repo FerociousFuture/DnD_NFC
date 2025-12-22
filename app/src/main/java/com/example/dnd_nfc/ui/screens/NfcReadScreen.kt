@@ -1,130 +1,163 @@
 package com.example.dnd_nfc.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.dnd_nfc.data.local.CharacterManager
+import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.ScanEvent
 
 @Composable
 fun NfcReadScreen(
     scanEvent: ScanEvent?,
-    onFullCharacterLoaded: (PlayerCharacter) -> Unit,
+    onFullCharacterLoaded: (PlayerCharacter) -> Unit, // Se usa para actualizar/escribir
     onScanAgainClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    // Si la lectura nos trajo el personaje completo, lo usamos.
-    val nfcFullChar = scanEvent?.fullCharacter
-    val nfcLightChar = scanEvent?.character
+    // Obtenemos los datos del evento de escaneo
+    val nfcChar = scanEvent?.fullCharacter
 
-    // Estado para saber si ya existe en local
-    var isLocal by remember { mutableStateOf(false) }
+    // Estado local editable para modificar HP o Estado in-situ
+    var currentData by remember { mutableStateOf(nfcChar) }
 
-    LaunchedEffect(nfcFullChar) {
-        if (nfcFullChar != null) {
-            val local = CharacterManager.getCharacterById(context, nfcFullChar.id)
-            isLocal = (local != null)
-        }
+    // Sincronizar si cambia el escaneo
+    LaunchedEffect(nfcChar) {
+        currentData = nfcChar
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (nfcFullChar == null && nfcLightChar == null) {
-            // ESTADO 1: ESPERANDO
+    if (currentData == null) {
+        // PANTALLA DE ESPERA
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    painter = painterResource(id = android.R.drawable.ic_menu_search),
-                    contentDescription = null,
-                    modifier = Modifier.size(80.dp),
-                    tint = MaterialTheme.colorScheme.secondary
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("Acerca una tarjeta...", style = MaterialTheme.typography.headlineSmall)
-                Spacer(modifier = Modifier.height(16.dp))
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
+                CircularProgressIndicator()
+                Spacer(Modifier.height(16.dp))
+                Text("Acerca una figura...", style = MaterialTheme.typography.titleLarge)
             }
-        } else if (nfcFullChar != null) {
-            // ESTADO 2: LECTURA EXITOSA (DATOS COMPLETOS)
-            // Mostramos los datos directamente del NFC
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
-            ) {
-                Spacer(modifier = Modifier.height(32.dp))
-                Text("Contenido de la Tarjeta", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Text(nfcFullChar.name, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                        Text("Nivel ${nfcFullChar.level} | ${nfcFullChar.race} ${nfcFullChar.charClass}", style = MaterialTheme.typography.titleMedium)
-                        Divider(modifier = Modifier.padding(vertical = 12.dp))
-
-                        // Stats principales
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            StatBox("FUE", nfcFullChar.str)
-                            StatBox("DES", nfcFullChar.dex)
-                            StatBox("CON", nfcFullChar.con)
-                            StatBox("INT", nfcFullChar.int)
-                            StatBox("SAB", nfcFullChar.wis)
-                            StatBox("CAR", nfcFullChar.cha)
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("HP Max: ${nfcFullChar.hpMax} | AC: ${nfcFullChar.ac}", fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                if (isLocal) {
-                    Button(onClick = { onFullCharacterLoaded(nfcFullChar) }) {
-                        Text("Abrir Ficha Local")
-                    }
-                    Text("Este personaje ya está en tu móvil.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top=8.dp))
-                } else {
-                    Button(
-                        onClick = { onFullCharacterLoaded(nfcFullChar) },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                    ) {
-                        Text("Importar Personaje")
-                    }
-                    Text("Guardar copia en este dispositivo.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top=8.dp))
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onScanAgainClick) { Text("Escanear otro") }
-            }
-        } else {
-            // ESTADO 3: DATOS PARCIALES (Si falló la descompresión pero leyó algo)
-            Text("Error: Datos ilegibles o dañados.", color = MaterialTheme.colorScheme.error)
-            Button(onClick = onScanAgainClick) { Text("Intentar de nuevo") }
         }
-    }
-}
+    } else {
+        // PANTALLA DE DATOS DE LA FIGURA
+        val char = currentData!!
 
-@Composable
-fun StatBox(label: String, value: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-        Text("$value", style = MaterialTheme.typography.bodyLarge)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // CABECERA: Nombre y Clase
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(char.name, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("${char.race} ${char.charClass}", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha=0.8f))
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // FILA: CD y ESTADO VISUAL
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                // CD
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.tertiaryContainer)
+                            .border(4.dp, MaterialTheme.colorScheme.tertiary, CircleShape)
+                    ) {
+                        Text("${char.spellSaveDC}", style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("CD", fontWeight = FontWeight.Bold)
+                }
+
+                // HP VISUAL
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                            .background(if(char.hpCurrent > 0) MaterialTheme.colorScheme.errorContainer else Color.Gray)
+                            .border(4.dp, MaterialTheme.colorScheme.error, CircleShape)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${char.hpCurrent}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Divider(Modifier.width(40.dp).padding(vertical = 2.dp), color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text("${char.hpMax}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f))
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Puntos de Golpe", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // CONTROLES DE HP
+            Text("Modificar Salud", style = MaterialTheme.typography.titleMedium)
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(onClick = {
+                    val newHp = (char.hpCurrent - 1).coerceAtLeast(0)
+                    currentData = char.copy(hpCurrent = newHp)
+                }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Default.Remove, null) }
+
+                Spacer(Modifier.width(24.dp))
+
+                Button(onClick = {
+                    val newHp = (char.hpCurrent + 1).coerceAtMost(char.hpMax)
+                    currentData = char.copy(hpCurrent = newHp)
+                }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))) { Icon(Icons.Default.Add, null) }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // ESTADO DE LA MINI (Editable)
+            Text("Estado de la Mini", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(
+                value = char.status,
+                onValueChange = { currentData = char.copy(status = it) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Ej: Normal, Aturdido...") }
+            )
+
+            Spacer(Modifier.height(48.dp))
+
+            // BOTÓN ACTUALIZAR FIGURA (WRITE BACK)
+            Button(
+                onClick = { onFullCharacterLoaded(currentData!!) }, // Esto llamará al proceso de escritura en MainActivity
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) {
+                Icon(Icons.Default.SaveAs, null)
+                Spacer(Modifier.width(8.dp))
+                Text("ACTUALIZAR FIGURA (ACERCAR NFC)", fontWeight = FontWeight.Bold)
+            }
+
+            TextButton(onClick = onScanAgainClick, modifier = Modifier.padding(top=16.dp)) {
+                Text("Cancelar / Escanear otra")
+            }
+        }
     }
 }
