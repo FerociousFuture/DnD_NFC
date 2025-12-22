@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.local.CharacterManager
 import com.example.dnd_nfc.data.model.Attack
-import com.example.dnd_nfc.data.model.BattleState // <--- IMPORTANTE: Necesario para el modo combate
+import com.example.dnd_nfc.data.model.BattleState
 import com.example.dnd_nfc.data.model.InventoryItem
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.Spell
@@ -41,7 +41,7 @@ fun CharacterSheetScreen(
     existingCharacter: PlayerCharacter? = null,
     onBack: () -> Unit,
     onWriteNfc: (PlayerCharacter) -> Unit, // Guardar Backup Completo
-    onWriteCombatNfc: (BattleState) -> Unit // <--- NUEVO: Crear Figura de Combate
+    onWriteCombatNfc: (BattleState) -> Unit // Crear Figura de Combate
 ) {
     val context = LocalContext.current
     // Si no existe, creamos uno nuevo. Si existe, usamos el pasado por parámetro.
@@ -74,14 +74,17 @@ fun CharacterSheetScreen(
                     // BOTÓN 1: MODO COMBATE (Rayo) - Inicializar Miniatura estilo "Skylander"
                     if (charData.id.isNotEmpty()) {
                         IconButton(onClick = {
-                            // Convertimos la ficha completa en un estado de batalla ligero
+                            // CORRECCIÓN AQUI:
+                            // Calculamos el modificador de destreza para la iniciativa automática
+                            val dexMod = (charData.dex - 10) / 2
+
                             val battleState = BattleState(
                                 id = charData.id,
                                 name = charData.name,
-                                hp = charData.hpCurrent, // <--- hp mapeado correctamente
+                                hp = charData.hpCurrent,
                                 maxHp = charData.hpMax,
                                 ac = charData.ac,
-                                initiative = charData.initiative // <--- iniciativa incluida
+                                initiativeMod = dexMod // Usamos el modificador, no el valor total
                             )
                             onWriteCombatNfc(battleState)
                         }, enabled = isFormValid) {

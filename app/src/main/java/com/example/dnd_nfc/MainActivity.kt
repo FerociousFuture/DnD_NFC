@@ -2,6 +2,7 @@ package com.example.dnd_nfc
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Bundle
@@ -30,27 +31,29 @@ import com.example.dnd_nfc.nfc.NfcCombatManager
 import com.example.dnd_nfc.nfc.NfcManager
 import com.example.dnd_nfc.ui.screens.*
 import com.example.dnd_nfc.ui.theme.DnD_NFCTheme
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
 
-    // MODOS DE OPERACIÓN
+    // MODOS DE ESCRITURA
     private var pendingCharacterToWrite: PlayerCharacter? = null
     private var pendingBattleStateToWrite: BattleState? = null
-    private var currentAttackRequest: NfcCombatManager.AttackRequest? = null
 
-    // ESTADOS UI
-    private var lastAttackResult by mutableStateOf<NfcCombatManager.AttackResult?>(null)
-    private var lastScanEvent: ScanEvent? = null
+    // ESTADO DE COMBATE (Lista en vivo)
+    // Usamos mutableStateListOf para que la UI reaccione a los cambios
+    private val combatParticipants = mutableStateListOf<BattleState>()
+    private var isCombatModeActive = false // Flag para saber si estamos en la pantalla de combate
+
+    // Eventos UI
+    private var lastScanEvent by mutableStateOf<ScanEvent?>(null)
     private var onNfcScanned: ((ScanEvent) -> Unit)? = null
-
-    // Lista Local de Combate
-    private var localBattleList by mutableStateOf<List<BattleState>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         setContent {
             DnD_NFCTheme {
@@ -59,20 +62,25 @@ class MainActivity : ComponentActivity() {
                     val context = LocalContext.current
                     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
-                    // Redirección de escaneo básico
-                    if (currentRoute == "main_menu" || currentRoute == "character_list") {
-                        onNfcScanned = { event ->
-                            lastScanEvent = event
-                            navController.navigate("nfc_read")
+                    // Flag de control: ¿Estamos en pantalla de Combate?
+                    isCombatModeActive = (currentRoute == "action_screen")
+
+                    // Navegación básica de lectura
+                    LaunchedEffect(currentRoute) {
+                        if (currentRoute == "main_menu" || currentRoute == "character_list") {
+                            onNfcScanned = { event ->
+                                lastScanEvent = event
+                                navController.navigate("nfc_read") { launchSingleTop = true }
+                            }
+                        } else {
+                            onNfcScanned = null
                         }
-                    } else {
-                        onNfcScanned = null
                     }
 
                     NavHost(navController = navController, startDestination = "main_menu") {
-
-                        // MENÚ PRINCIPAL
+                        // ... (Main Menu, Character List, Character Sheet, Nfc Read IGUAL QUE ANTES) ...
                         composable("main_menu") {
+                            ResetWriteModes()
                             MainMenuScreen(
                                 onNavigateToCharacters = { navController.navigate("character_list") },
                                 onNavigateToCampaigns = { navController.navigate("campaign_list") },
@@ -80,8 +88,8 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // LISTAS Y FICHAS
                         composable("character_list") {
+                            ResetWriteModes()
                             CharacterListScreen(
                                 onCharacterClick = { char -> navController.navigate("character_sheet/${char.id}") },
                                 onNewCharacterClick = { navController.navigate("character_sheet/new") }
@@ -90,16 +98,10 @@ class MainActivity : ComponentActivity() {
 
                         composable("character_sheet/{charId}") { backStackEntry ->
                             val charId = backStackEntry.arguments?.getString("charId")
-                            val character = if (charId != null && charId != "new") {
-                                CharacterManager.getCharacterById(context, charId)
-                            } else { null }
+                            val character = if (charId != null && charId != "new") CharacterManager.getCharacterById(context, charId) else null
 
-                            DisposableEffect(Unit) {
-                                onDispose {
-                                    pendingCharacterToWrite = null
-                                    pendingBattleStateToWrite = null
-                                }
-                            }
+                            // Al salir de la ficha, limpiamos modos de escritura
+                            DisposableEffect(Unit) { onDispose { ResetWriteModes() } }
 
                             CharacterSheetScreen(
                                 existingCharacter = character,
@@ -110,51 +112,49 @@ class MainActivity : ComponentActivity() {
                                     Toast.makeText(context, "Modo BACKUP: Acerca tarjeta.", Toast.LENGTH_SHORT).show()
                                 },
                                 onWriteCombatNfc = { battleState ->
-                                    pendingBattleStateToWrite = battleState
+                                    // AQUI ES IMPORTANTE: Escribir el battleState con el modificador correcto
+                                    // Si venimos de la ficha, podemos calcular el Dex mod
+                                    val dexMod = character?.let { (it.dex - 10) / 2 } ?: 0
+                                    val stateWithMod = battleState.copy(initiativeMod = dexMod)
+
+                                    pendingBattleStateToWrite = stateWithMod
                                     pendingCharacterToWrite = null
-                                    Toast.makeText(context, "Modo FIGURA: Acerca miniatura.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Modo MINIATURA: Acerca figura.", Toast.LENGTH_SHORT).show()
                                 }
                             )
                         }
 
-                        // PANTALLAS DE UTILIDAD
                         composable("nfc_read") {
                             NfcReadScreen(
                                 scanEvent = lastScanEvent,
                                 onFullCharacterLoaded = { fullChar ->
                                     CharacterManager.saveCharacter(context, fullChar)
-                                    navController.navigate("character_sheet/${fullChar.id}") {
-                                        popUpTo("character_list")
-                                    }
+                                    navController.navigate("character_sheet/${fullChar.id}") { popUpTo("character_list") }
                                 },
                                 onScanAgainClick = { lastScanEvent = null }
                             )
                         }
 
-                        composable("campaign_list") {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Próximamente") }
-                        }
+                        composable("campaign_list") { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Próximamente") } }
 
-                        // MESA DE COMBATE LOCAL
+                        // --- PANTALLA DE ACCIÓN (DADOS Y COMBATE) ---
                         composable("action_screen") {
-                            DisposableEffect(Unit) {
-                                if (currentAttackRequest == null) {
-                                    // Valores por defecto
-                                    currentAttackRequest = NfcCombatManager.AttackRequest(1, 20, 0)
-                                }
-                                onDispose { currentAttackRequest = null }
-                            }
-
+                            // Pasamos la lista mutable al composable
                             ActionScreen(
-                                lastResult = lastAttackResult,
-                                battleList = localBattleList,
-                                onSetupAttack = { request -> currentAttackRequest = request }
+                                combatList = combatParticipants.sortedByDescending { it.currentInitiative ?: -99 },
+                                onResetCombat = { combatParticipants.clear() },
+                                onRemoveCombatant = { id -> combatParticipants.removeAll { it.id == id } }
                             )
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun ResetWriteModes() {
+        pendingCharacterToWrite = null
+        pendingBattleStateToWrite = null
     }
 
     override fun onResume() {
@@ -173,77 +173,99 @@ class MainActivity : ComponentActivity() {
         nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
     }
 
-    // --- PROCESAMIENTO NFC OFFLINE ---
+    // --- PROCESAMIENTO NFC ---
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
 
         if (NfcAdapter.ACTION_TAG_DISCOVERED == intent.action || NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG) ?: return
 
-            // 1. ESCRITURA: CREAR FIGURA
+            // 1. ESCRITURA (Prioridad Alta)
             if (pendingBattleStateToWrite != null) {
                 if (NfcCombatManager.writeTag(tag, pendingBattleStateToWrite!!)) {
-                    feedback("¡Miniatura creada!")
-                    pendingBattleStateToWrite = null
-                } else feedback("Error de escritura")
+                    feedback("¡Miniatura configurada!")
+                    ResetWriteModes()
+                } else feedback("Error al escribir")
                 return
             }
-
-            // 2. ESCRITURA: BACKUP
             if (pendingCharacterToWrite != null) {
                 if (NfcManager.writeCharacterToTag(tag, pendingCharacterToWrite!!)) {
                     feedback("¡Backup guardado!")
-                    pendingCharacterToWrite = null
-                } else feedback("Error: Ficha muy grande")
+                    ResetWriteModes()
+                } else feedback("Error de espacio/formato")
                 return
             }
 
-            // 3. COMBATE (Tirada manual aplicada a figura)
-            if (currentAttackRequest != null) {
-                val result = NfcCombatManager.performAttack(tag, currentAttackRequest!!)
-                if (result != null) {
-                    lastAttackResult = result
-                    updateLocalList(result.enemyState)
-                } else {
-                    feedback("Error o Tag incompatible")
-                }
+            // 2. MODO COMBATE (Si estamos en la pantalla ActionScreen)
+            if (isCombatModeActive) {
+                addToCombat(intent, tag)
                 return
             }
 
-            // 4. LECTURA SIMPLE (Backup o Figura)
+            // 3. MODO LECTURA DEFAULT
             val char = NfcManager.readCharacterFromIntent(intent)
             if (char != null) {
-                // LEÍDO CORRECTAMENTE
-                if (onNfcScanned != null) {
-                    // Pasamos el personaje completo al evento para mostrarlo en pantalla
-                    onNfcScanned?.invoke(
-                        ScanEvent(
-                            character = CharacterSheet(char.id, char.name, "Nivel ${char.level}"),
-                            fullCharacter = char // <--- DATOS COMPLETOS AQUI
-                        )
-                    )
-                } else {
-                    CharacterManager.saveCharacter(this, char)
-                    feedback("Personaje importado")
-                }
+                val event = ScanEvent(CharacterSheet(char.id, char.name, "Nivel ${char.level}"), char)
+                if (onNfcScanned != null) onNfcScanned?.invoke(event)
+                else lastScanEvent = event
             } else {
-                // Intentar leer como figura de combate
-                val combatState = NfcCombatManager.readTag(tag)
-                if (combatState != null) {
-                    feedback("Figura: ${combatState.name} (${combatState.hp} HP)")
-                    updateLocalList(combatState)
-                } else {
-                    feedback("Tarjeta desconocida o ilegible")
-                }
+                // Intentar leer mini simple
+                val mini = NfcCombatManager.readTag(tag)
+                if (mini != null) feedback("Miniatura: ${mini.name}")
+                else feedback("Tag vacío o desconocido")
             }
         }
     }
 
-    private fun updateLocalList(newState: BattleState) {
-        val list = localBattleList.toMutableList()
-        val idx = list.indexOfFirst { it.id == newState.id }
-        if (idx != -1) list[idx] = newState else list.add(newState)
-        localBattleList = list
+    // Lógica para añadir al combate y calcular iniciativa
+    private fun addToCombat(intent: Intent, tag: Tag) {
+        // Intento 1: Leer Personaje Completo (Ficha)
+        val fullChar = NfcManager.readCharacterFromIntent(intent)
+        if (fullChar != null) {
+            // Calculamos iniciativa: d20 + (dex-10)/2
+            val dexMod = (fullChar.dex - 10) / 2
+            val roll = Random.nextInt(1, 21)
+            val totalInit = roll + dexMod
+
+            // Convertimos a BattleState para la lista
+            val combatant = BattleState(
+                id = fullChar.id,
+                name = fullChar.name,
+                hp = fullChar.hpMax, // Asumimos full HP al inicio
+                maxHp = fullChar.hpMax,
+                ac = fullChar.ac,
+                initiativeMod = dexMod,
+                currentInitiative = totalInit
+            )
+
+            addOrUpdateCombatant(combatant)
+            feedback("${fullChar.name} añadido (Iniciativa: $totalInit)")
+            return
+        }
+
+        // Intento 2: Leer Miniatura (BattleState)
+        val mini = NfcCombatManager.readTag(tag)
+        if (mini != null) {
+            val roll = Random.nextInt(1, 21)
+            val totalInit = roll + mini.initiativeMod // Usa el mod guardado en la etiqueta
+
+            val combatant = mini.copy(currentInitiative = totalInit)
+            addOrUpdateCombatant(combatant)
+            feedback("${mini.name} añadido (Iniciativa: $totalInit)")
+            return
+        }
+
+        feedback("No se pudo leer datos de combate válidos")
+    }
+
+    private fun addOrUpdateCombatant(new: BattleState) {
+        // Si ya existe, lo reemplazamos (actualizamos iniciativa)
+        val idx = combatParticipants.indexOfFirst { it.id == new.id }
+        if (idx >= 0) {
+            combatParticipants[idx] = new
+        } else {
+            combatParticipants.add(new)
+        }
     }
 
     private fun feedback(msg: String) {

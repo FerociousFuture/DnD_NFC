@@ -1,12 +1,11 @@
 package com.example.dnd_nfc.data.model
 
-import java.util.UUID
-
 data class BattleState(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String = "Enemigo",
-    val hp: Int = 0,
-    val maxHp: Int = 0,
-    val ac: Int = 10,
-    val initiative: Int = 0
+    val id: String,
+    val name: String,
+    val hp: Int,
+    val maxHp: Int,
+    val ac: Int,
+    val initiativeMod: Int = 0, // NUEVO: Para calcular iniciativa automática
+    val currentInitiative: Int? = null // Opcional: para guardar el resultado actual
 )

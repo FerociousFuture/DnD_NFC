@@ -1,5 +1,7 @@
 package com.example.dnd_nfc.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,169 +14,198 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.dnd_nfc.data.model.BattleState
-import com.example.dnd_nfc.nfc.NfcCombatManager
+import kotlin.random.Random
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActionScreen(
-    lastResult: NfcCombatManager.AttackResult?,
-    battleList: List<BattleState>,
-    onSetupAttack: (NfcCombatManager.AttackRequest) -> Unit
+    // Estados de Combate
+    combatList: List<BattleState>,
+    onResetCombat: () -> Unit,
+    onRemoveCombatant: (String) -> Unit
 ) {
-    // Estados para configurar la tirada
-    var diceCount by remember { mutableStateOf("1") }
-    var dieFaces by remember { mutableStateOf("8") } // Por defecto d8
-    var bonus by remember { mutableStateOf("0") }
+    var selectedTab by remember { mutableStateOf(0) } // 0: Dados, 1: Combate
 
-    // Opciones de dados comunes
-    val diceOptions = listOf("4", "6", "8", "10", "12", "20", "100")
-    var expandedDiceMenu by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // --- PESTAÑAS SUPERIORES ---
+        TabRow(selectedTabIndex = selectedTab) {
+            Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("DADOS") })
+            Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("COMBATE") })
+        }
 
-    // Actualizamos la configuración para el MainActivity
-    LaunchedEffect(diceCount, dieFaces, bonus) {
-        onSetupAttack(
-            NfcCombatManager.AttackRequest(
-                diceCount = diceCount.toIntOrNull() ?: 1,
-                dieFaces = dieFaces.toIntOrNull() ?: 8,
-                bonus = bonus.toIntOrNull() ?: 0
-            )
-        )
+        when (selectedTab) {
+            0 -> DiceRollerSection()
+            1 -> CombatTrackerSection(combatList, onResetCombat, onRemoveCombatant)
+        }
     }
+}
 
-    Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("TIRADA DE DADOS", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("(Acerca figura NFC para aplicar)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+// ---------------------------------------------------------
+// SECCIÓN 1: LANZADOR DE DADOS (Independiente)
+// ---------------------------------------------------------
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiceRollerSection() {
+    var count by remember { mutableStateOf("1") }
+    var faces by remember { mutableStateOf("20") }
+    var bonus by remember { mutableStateOf("0") }
+    var resultText by remember { mutableStateOf("") }
+    var resultValue by remember { mutableStateOf(0) }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Lanzador Rápido", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // --- 1. CONFIGURACIÓN SIMPLE (Cantidad | Dado | Bono) ---
-        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            Row(
-                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // CANTIDAD
-                OutlinedTextField(
-                    value = diceCount,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) diceCount = it },
-                    label = { Text("#") },
-                    modifier = Modifier.weight(0.8f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                Text("d", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-
-                // TIPO DE DADO (Menu desplegable)
-                Box(modifier = Modifier.weight(1f)) {
-                    OutlinedTextField(
-                        value = dieFaces,
-                        onValueChange = {},
-                        label = { Text("Cara") },
-                        readOnly = true,
-                        trailingIcon = {
-                            IconButton(onClick = { expandedDiceMenu = true }) {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDiceMenu)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    DropdownMenu(
-                        expanded = expandedDiceMenu,
-                        onDismissRequest = { expandedDiceMenu = false }
-                    ) {
-                        diceOptions.forEach { faces ->
-                            DropdownMenuItem(
-                                text = { Text("d$faces") },
-                                onClick = {
-                                    dieFaces = faces
-                                    expandedDiceMenu = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Text("+", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-
-                // BONIFICACIÓN
-                OutlinedTextField(
-                    value = bonus,
-                    onValueChange = { if (it.all { char -> char.isDigit() || char == '-' }) bonus = it },
-                    label = { Text("Bono") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-            }
+        // Configuración
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = count,
+                onValueChange = { if (it.all { c -> c.isDigit() }) count = it },
+                label = { Text("#") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            Text("d", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = faces,
+                onValueChange = { if (it.all { c -> c.isDigit() }) faces = it },
+                label = { Text("Caras") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            Text("+", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = bonus,
+                onValueChange = { if (it.all { c -> c.isDigit() || c == '-' }) bonus = it },
+                label = { Text("Bono") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
         }
 
-        // --- 2. RESULTADO (FEEDBACK VISUAL) ---
-        if (lastResult != null) {
-            val color = if (lastResult.hit) Color(0xFFC62828) else Color.Gray
-            Card(
-                colors = CardDefaults.cardColors(containerColor = color),
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-            ) {
-                Column(
-                    Modifier.padding(16.dp).fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(lastResult.message, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(
-                        text = "-${lastResult.damageDealt} HP",
-                        color = Color.White,
-                        style = MaterialTheme.typography.displaySmall
-                    )
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Botón Lanzar
+        Button(
+            onClick = {
+                val c = count.toIntOrNull() ?: 1
+                val f = faces.toIntOrNull() ?: 20
+                val b = bonus.toIntOrNull() ?: 0
+
+                var total = 0
+                val rolls = mutableListOf<Int>()
+                repeat(c) {
+                    val r = Random.nextInt(1, f + 1)
+                    rolls.add(r)
+                    total += r
                 }
-            }
-        } else {
-            Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                Text("Configura los dados y escanea una miniatura", color = Color.Gray)
-            }
-        }
-
-        Divider()
-
-        // --- 3. LISTA DE FIGURAS EN MESA ---
-        Text("Figuras en juego:", modifier = Modifier.align(Alignment.Start).padding(top = 8.dp))
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxWidth().weight(1f)
+                resultValue = total + b
+                resultText = "Dados: $rolls ${if(b!=0) "+ ($b)" else ""}"
+            },
+            modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
-            items(battleList) { entity ->
-                BattleRow(entity)
+            Text("LANZAR", fontSize = 18.sp)
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // Resultado
+        if (resultText.isNotEmpty()) {
+            Text(resultText, color = Color.Gray)
+            Text(
+                text = "$resultValue",
+                style = MaterialTheme.typography.displayLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------
+// SECCIÓN 2: TRACKER DE COMBATE (NFC)
+// ---------------------------------------------------------
+@Composable
+fun CombatTrackerSection(
+    combatList: List<BattleState>,
+    onReset: () -> Unit,
+    onRemove: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Cabecera de controles
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp).background(MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text("Modo Combate Activo", fontWeight = FontWeight.Bold)
+                Text("Escanea NFC para añadir", style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                onClick = onReset,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Reiniciar")
+            }
+        }
+
+        // Lista de Iniciativa
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(combatList) { combatant ->
+                CombatantRow(combatant, onRemove)
+            }
+        }
+
+        if (combatList.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text("La lista de iniciativa está vacía.", color = Color.Gray)
             }
         }
     }
 }
 
 @Composable
-fun BattleRow(entity: BattleState) {
-    val hpPercent = if (entity.maxHp > 0) entity.hp.toFloat() / entity.maxHp.toFloat() else 0f
-    val barColor = when {
-        hpPercent > 0.5f -> Color.Green
-        hpPercent > 0.2f -> Color.Yellow
-        else -> Color.Red
-    }
-
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(entity.name, fontWeight = FontWeight.Bold)
-                Text("AC: ${entity.ac}", style = MaterialTheme.typography.bodySmall)
+fun CombatantRow(combatant: BattleState, onRemove: (String) -> Unit) {
+    Card(elevation = CardDefaults.cardElevation(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Círculo de Iniciativa
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(50.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "${combatant.currentInitiative ?: 0}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(120.dp)) {
-                Text("${entity.hp} / ${entity.maxHp} HP", fontWeight = FontWeight.Bold)
-                LinearProgressIndicator(
-                    progress = { hpPercent },
-                    modifier = Modifier.height(8.dp).fillMaxWidth().padding(top = 4.dp),
-                    color = barColor,
-                    trackColor = Color.Gray
-                )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Datos
+            Column(modifier = Modifier.weight(1f)) {
+                Text(combatant.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("HP: ${combatant.hp} / ${combatant.maxHp} | AC: ${combatant.ac}", style = MaterialTheme.typography.bodyMedium)
+                Text("Bono Init: ${if(combatant.initiativeMod >=0) "+" else ""}${combatant.initiativeMod}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+
+            // Botón Borrar
+            IconButton(onClick = { onRemove(combatant.id) }) {
+                Text("X", fontWeight = FontWeight.Bold, color = Color.Red)
             }
         }
     }
