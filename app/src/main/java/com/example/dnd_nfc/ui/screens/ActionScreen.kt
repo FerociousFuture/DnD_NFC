@@ -3,99 +3,142 @@ package com.example.dnd_nfc.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.dnd_nfc.data.model.BattleState
 import com.example.dnd_nfc.nfc.NfcCombatManager
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActionScreen(
     lastResult: NfcCombatManager.AttackResult?,
-    battleList: List<BattleState>, // Lista local de figuras escaneadas
+    battleList: List<BattleState>,
     onSetupAttack: (NfcCombatManager.AttackRequest) -> Unit
 ) {
-    // Estados para configurar el ataque
-    var atkBonus by remember { mutableStateOf("5") }
-    var dmgDice by remember { mutableStateOf("1d8") }
-    var dmgBonus by remember { mutableStateOf("2") }
-    var advantage by remember { mutableStateOf(false) }
+    // Estados para configurar la tirada
+    var diceCount by remember { mutableStateOf("1") }
+    var dieFaces by remember { mutableStateOf("8") } // Por defecto d8
+    var bonus by remember { mutableStateOf("0") }
 
-    // Enviamos la configuración al padre cada vez que cambia algo
-    LaunchedEffect(atkBonus, dmgDice, dmgBonus, advantage) {
+    // Opciones de dados comunes
+    val diceOptions = listOf("4", "6", "8", "10", "12", "20", "100")
+    var expandedDiceMenu by remember { mutableStateOf(false) }
+
+    // Actualizamos la configuración para el MainActivity
+    LaunchedEffect(diceCount, dieFaces, bonus) {
         onSetupAttack(
             NfcCombatManager.AttackRequest(
-                attackBonus = atkBonus.toIntOrNull() ?: 0,
-                damageDice = dmgDice,
-                damageBonus = dmgBonus.toIntOrNull() ?: 0,
-                hasAdvantage = advantage
+                diceCount = diceCount.toIntOrNull() ?: 1,
+                dieFaces = dieFaces.toIntOrNull() ?: 8,
+                bonus = bonus.toIntOrNull() ?: 0
             )
         )
     }
 
     Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("MESA DE COMBATE", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("TIRADA DE DADOS", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("(Acerca figura NFC para aplicar)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
 
-        // --- 1. CONFIGURACIÓN DE DADOS ---
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // --- 1. CONFIGURACIÓN SIMPLE (Cantidad | Dado | Bono) ---
         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            Column(Modifier.padding(12.dp)) {
-                Text("Tus Dados", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+            Row(
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // CANTIDAD
+                OutlinedTextField(
+                    value = diceCount,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) diceCount = it },
+                    label = { Text("#") },
+                    modifier = Modifier.weight(0.8f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = advantage, onCheckedChange = { advantage = it })
-                    Text("Ventaja")
+                Text("d", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+                // TIPO DE DADO (Menu desplegable)
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = dieFaces,
+                        onValueChange = {},
+                        label = { Text("Cara") },
+                        readOnly = true,
+                        trailingIcon = {
+                            IconButton(onClick = { expandedDiceMenu = true }) {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDiceMenu)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    DropdownMenu(
+                        expanded = expandedDiceMenu,
+                        onDismissRequest = { expandedDiceMenu = false }
+                    ) {
+                        diceOptions.forEach { faces ->
+                            DropdownMenuItem(
+                                text = { Text("d$faces") },
+                                onClick = {
+                                    dieFaces = faces
+                                    expandedDiceMenu = false
+                                }
+                            )
+                        }
+                    }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = atkBonus,
-                        onValueChange = { atkBonus = it },
-                        label = { Text("Ataque") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = dmgDice,
-                        onValueChange = { dmgDice = it },
-                        label = { Text("Dados") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = dmgBonus,
-                        onValueChange = { dmgBonus = it },
-                        label = { Text("Daño") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
+                Text("+", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+                // BONIFICACIÓN
+                OutlinedTextField(
+                    value = bonus,
+                    onValueChange = { if (it.all { char -> char.isDigit() || char == '-' }) bonus = it },
+                    label = { Text("Bono") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
             }
         }
 
         // --- 2. RESULTADO (FEEDBACK VISUAL) ---
         if (lastResult != null) {
-            val color = if (lastResult.hit) Color(0xFF2E7D32) else Color(0xFFC62828) // Verde o Rojo
-            Card(colors = CardDefaults.cardColors(containerColor = color), modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Column(Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            val color = if (lastResult.hit) Color(0xFFC62828) else Color.Gray
+            Card(
+                colors = CardDefaults.cardColors(containerColor = color),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+            ) {
+                Column(
+                    Modifier.padding(16.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(lastResult.message, color = Color.White, fontWeight = FontWeight.Bold)
-                    if (lastResult.hit) {
-                        Text("Daño total: ${lastResult.damageDealt}", color = Color.White, style = MaterialTheme.typography.displaySmall)
-                    }
+                    Text(
+                        text = "-${lastResult.damageDealt} HP",
+                        color = Color.White,
+                        style = MaterialTheme.typography.displaySmall
+                    )
                 }
             }
         } else {
             Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-                Text("Acerca una figura NFC al móvil para atacar", color = Color.Gray)
+                Text("Configura los dados y escanea una miniatura", color = Color.Gray)
             }
         }
 
         Divider()
 
-        // --- 3. LISTA DE FIGURAS EN MESA (Solo informativo local) ---
+        // --- 3. LISTA DE FIGURAS EN MESA ---
         Text("Figuras en juego:", modifier = Modifier.align(Alignment.Start).padding(top = 8.dp))
 
         LazyColumn(

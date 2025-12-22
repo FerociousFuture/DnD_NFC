@@ -14,66 +14,50 @@ object NfcCombatManager {
     private val gson = Gson()
 
     data class AttackRequest(
-        val attackBonus: Int,
-        val damageDice: String,
-        val damageBonus: Int,
-        val hasAdvantage: Boolean = false
+        val diceCount: Int,
+        val dieFaces: Int,
+        val bonus: Int
     )
 
     data class AttackResult(
-        val hit: Boolean,
+        val hit: Boolean, // Siempre true en este modo manual
         val damageDealt: Int,
-        val attackRoll: Int,
+        val attackRoll: Int, // No se usa, se deja a 0
         val enemyState: BattleState,
         val message: String
     )
 
     fun performAttack(tag: Tag, request: AttackRequest): AttackResult? {
-        // 1. LEER
+        // 1. LEER ESTADO ACTUAL DE LA FIGURA
         val currentState = readTag(tag) ?: return null
 
-        // 2. CALCULAR
-        val roll1 = Random.nextInt(1, 21)
-        val roll2 = Random.nextInt(1, 21)
-        val rawRoll = if (request.hasAdvantage) maxOf(roll1, roll2) else roll1
-        val totalAttack = rawRoll + request.attackBonus
-
-        val isHit = totalAttack >= currentState.ac || rawRoll == 20
-        var damage = 0
-        var newState = currentState
-
-        if (isHit) {
-            damage = rollDamage(request.damageDice) + request.damageBonus
-            if (rawRoll == 20) damage += rollDamage(request.damageDice)
-
-            var newHp = currentState.hp - damage
-            if (newHp < 0) newHp = 0
-
-            newState = currentState.copy(hp = newHp)
-
-            // 3. ESCRIBIR (Solo físico)
-            val written = writeTag(tag, newState)
-            if (!written) return null
-
-            // ELIMINADO: GameClient.sendUpdate(newState) -> Ya no hay servidor
+        // 2. CALCULAR RESULTADO DE DADOS (Sin tirada de ataque contra AC)
+        var totalRoll = 0
+        repeat(request.diceCount) {
+            totalRoll += Random.nextInt(1, request.dieFaces + 1)
         }
+        val finalValue = totalRoll + request.bonus
+
+        // Evitamos valores negativos (aunque podría ser curación si se implementara lógica, asumimos daño)
+        val damage = if (finalValue < 0) 0 else finalValue
+
+        // 3. APLICAR DAÑO A LA VIDA
+        var newHp = currentState.hp - damage
+        if (newHp < 0) newHp = 0
+
+        val newState = currentState.copy(hp = newHp)
+
+        // 4. ESCRIBIR NUEVO ESTADO EN LA FIGURA
+        val written = writeTag(tag, newState)
+        if (!written) return null
 
         return AttackResult(
-            hit = isHit,
+            hit = true,
             damageDealt = damage,
-            attackRoll = totalAttack,
+            attackRoll = 0,
             enemyState = newState,
-            message = if (isHit) "¡Impacto! ($totalAttack vs AC ${currentState.ac})" else "Fallo... ($totalAttack vs AC ${currentState.ac})"
+            message = "Tirada: ${request.diceCount}d${request.dieFaces}+${request.bonus} = $finalValue"
         )
-    }
-
-    private fun rollDamage(dice: String): Int {
-        return try {
-            val parts = dice.lowercase().split("d")
-            val count = parts[0].toInt()
-            val faces = parts[1].toInt()
-            (1..count).sumOf { Random.nextInt(1, faces + 1) }
-        } catch (e: Exception) { 0 }
     }
 
     fun readTag(tag: Tag): BattleState? {

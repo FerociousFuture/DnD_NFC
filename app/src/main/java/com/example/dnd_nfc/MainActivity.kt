@@ -23,6 +23,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.dnd_nfc.data.local.CharacterManager
 import com.example.dnd_nfc.data.model.BattleState
+import com.example.dnd_nfc.data.model.CharacterSheet
 import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.ScanEvent
 import com.example.dnd_nfc.nfc.NfcCombatManager
@@ -44,7 +45,7 @@ class MainActivity : ComponentActivity() {
     private var lastScanEvent: ScanEvent? = null
     private var onNfcScanned: ((ScanEvent) -> Unit)? = null
 
-    // Lista Local de Combate (Se llena al escanear)
+    // Lista Local de Combate
     private var localBattleList by mutableStateOf<List<BattleState>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,7 +94,6 @@ class MainActivity : ComponentActivity() {
                                 CharacterManager.getCharacterById(context, charId)
                             } else { null }
 
-                            // Limpieza de modos de escritura
                             DisposableEffect(Unit) {
                                 onDispose {
                                     pendingCharacterToWrite = null
@@ -137,10 +137,10 @@ class MainActivity : ComponentActivity() {
 
                         // MESA DE COMBATE LOCAL
                         composable("action_screen") {
-                            // Activamos modo combate al entrar
                             DisposableEffect(Unit) {
                                 if (currentAttackRequest == null) {
-                                    currentAttackRequest = NfcCombatManager.AttackRequest(0, "1d20", 0)
+                                    // Valores por defecto
+                                    currentAttackRequest = NfcCombatManager.AttackRequest(1, 20, 0)
                                 }
                                 onDispose { currentAttackRequest = null }
                             }
@@ -198,36 +198,42 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            // 3. COMBATE
+            // 3. COMBATE (Tirada manual aplicada a figura)
             if (currentAttackRequest != null) {
                 val result = NfcCombatManager.performAttack(tag, currentAttackRequest!!)
                 if (result != null) {
                     lastAttackResult = result
-                    // Actualizamos la lista local con el nuevo estado del enemigo
                     updateLocalList(result.enemyState)
                 } else {
-                    feedback("Error en ataque")
+                    feedback("Error o Tag incompatible")
                 }
                 return
             }
 
-            // 4. LECTURA SIMPLE
+            // 4. LECTURA SIMPLE (Backup o Figura)
             val char = NfcManager.readCharacterFromIntent(intent)
             if (char != null) {
+                // LEÍDO CORRECTAMENTE
                 if (onNfcScanned != null) {
-                    onNfcScanned?.invoke(ScanEvent(com.example.dnd_nfc.data.model.CharacterSheet(char.id, char.name, "Nivel ${char.level}")))
+                    // Pasamos el personaje completo al evento para mostrarlo en pantalla
+                    onNfcScanned?.invoke(
+                        ScanEvent(
+                            character = CharacterSheet(char.id, char.name, "Nivel ${char.level}"),
+                            fullCharacter = char // <--- DATOS COMPLETOS AQUI
+                        )
+                    )
                 } else {
                     CharacterManager.saveCharacter(this, char)
                     feedback("Personaje importado")
                 }
             } else {
-                // Intentar leer como figura de combate para ver info
+                // Intentar leer como figura de combate
                 val combatState = NfcCombatManager.readTag(tag)
                 if (combatState != null) {
                     feedback("Figura: ${combatState.name} (${combatState.hp} HP)")
-                    updateLocalList(combatState) // Lo mostramos en la mesa
+                    updateLocalList(combatState)
                 } else {
-                    feedback("Tarjeta desconocida")
+                    feedback("Tarjeta desconocida o ilegible")
                 }
             }
         }
