@@ -5,10 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,18 +21,16 @@ import androidx.compose.ui.unit.dp
 fun MainMenuScreen(
     onNavigateToCharacters: () -> Unit,
     onNavigateToCampaigns: () -> Unit,
-    onHostGame: () -> Unit,
-    onJoinGame: () -> Unit
+    onNavigateToCombat: () -> Unit // Nuevo: Directo al combate local
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .verticalScroll(rememberScrollState()), // Scroll por si la pantalla es pequeña
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // --- CABECERA ---
         Text(
             text = "D&D NFC",
             style = MaterialTheme.typography.displayMedium,
@@ -41,110 +38,55 @@ fun MainMenuScreen(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Gestor de Mesa Local",
+            text = "Gestor Offline",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.secondary
         )
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // --- GESTIÓN PERSONAL ---
-        MenuCard(
-            title = "Mis Personajes",
-            subtitle = "Fichas, inventario y magia",
-            icon = Icons.Default.Description,
-            onClick = onNavigateToCharacters
-        )
-
+        // GESTIÓN
+        MenuCard("Mis Personajes", "Fichas e Inventario", Icons.Default.Description, onNavigateToCharacters)
         Spacer(modifier = Modifier.height(16.dp))
-
-        MenuCard(
-            title = "Mis Campañas",
-            subtitle = "Bitácora y notas de DM",
-            icon = Icons.Default.Groups,
-            onClick = onNavigateToCampaigns
-        )
+        MenuCard("Mis Campañas", "Bitácora y Notas", Icons.Default.Groups, onNavigateToCampaigns)
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // --- MULTIJUGADOR LOCAL ---
-        Text(
-            "Sala de Combate (WiFi)",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.tertiary
-        )
+        // ZONA DE ACCIÓN
+        Text("Herramientas", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.tertiary)
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        Button(
+            onClick = onNavigateToCombat,
+            modifier = Modifier.fillMaxWidth().height(70.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+            shape = MaterialTheme.shapes.medium
         ) {
-            // Botón DM (HOST)
-            Button(
-                onClick = onHostGame,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(80.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.WifiTethering, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("Crear Sala", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("(DM)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-            }
-
-            // Botón JUGADOR (CLIENTE)
-            Button(
-                onClick = onJoinGame,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(80.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.QrCode, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Text("Unirse", color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Text("(Escanear)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Casino, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    "Mesa de Combate (Dados & NFC)",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
-
-        Text(
-            text = "Acerca una miniatura para ver sus stats rápidos",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
-            textAlign = TextAlign.Center
-        )
+        Text("Modo Local Activo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
     }
 }
 
 @Composable
 fun MenuCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(90.dp)
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth().height(90.dp).clickable { onClick() },
         elevation = CardDefaults.cardElevation(4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+        Row(modifier = Modifier.fillMaxSize().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)

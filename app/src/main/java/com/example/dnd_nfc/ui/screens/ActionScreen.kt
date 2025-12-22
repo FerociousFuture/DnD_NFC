@@ -16,15 +16,16 @@ import com.example.dnd_nfc.nfc.NfcCombatManager
 @Composable
 fun ActionScreen(
     lastResult: NfcCombatManager.AttackResult?,
-    battleList: List<BattleState>, // <--- NUEVO: Recibimos la lista de la sala
+    battleList: List<BattleState>, // Lista local de figuras escaneadas
     onSetupAttack: (NfcCombatManager.AttackRequest) -> Unit
 ) {
+    // Estados para configurar el ataque
     var atkBonus by remember { mutableStateOf("5") }
     var dmgDice by remember { mutableStateOf("1d8") }
     var dmgBonus by remember { mutableStateOf("2") }
     var advantage by remember { mutableStateOf(false) }
 
-    // Actualizamos configuración
+    // Enviamos la configuración al padre cada vez que cambia algo
     LaunchedEffect(atkBonus, dmgDice, dmgBonus, advantage) {
         onSetupAttack(
             NfcCombatManager.AttackRequest(
@@ -37,43 +38,66 @@ fun ActionScreen(
     }
 
     Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("SALA DE COMBATE", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("MESA DE COMBATE", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
-        // --- SECCIÓN 1: CONFIGURAR ATAQUE ---
+        // --- 1. CONFIGURACIÓN DE DADOS ---
         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             Column(Modifier.padding(12.dp)) {
-                Text("Tu Arma", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                Text("Tus Dados", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = advantage, onCheckedChange = { advantage = it })
                     Text("Ventaja")
                 }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = atkBonus, onValueChange = { atkBonus = it }, label = { Text("Atq") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = dmgDice, onValueChange = { dmgDice = it }, label = { Text("Dados") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = dmgBonus, onValueChange = { dmgBonus = it }, label = { Text("Dmg") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        value = atkBonus,
+                        onValueChange = { atkBonus = it },
+                        label = { Text("Ataque") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = dmgDice,
+                        onValueChange = { dmgDice = it },
+                        label = { Text("Dados") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = dmgBonus,
+                        onValueChange = { dmgBonus = it },
+                        label = { Text("Daño") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
                 }
             }
         }
 
-        // --- SECCIÓN 2: RESULTADO ÚLTIMA ACCIÓN ---
+        // --- 2. RESULTADO (FEEDBACK VISUAL) ---
         if (lastResult != null) {
-            val color = if (lastResult.hit) Color(0xFF8B0000) else Color.Gray
+            val color = if (lastResult.hit) Color(0xFF2E7D32) else Color(0xFFC62828) // Verde o Rojo
             Card(colors = CardDefaults.cardColors(containerColor = color), modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 Column(Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(lastResult.message, color = Color.White, fontWeight = FontWeight.Bold)
                     if (lastResult.hit) {
-                        Text("-${lastResult.damageDealt} HP a ${lastResult.enemyState.name}", color = Color.Yellow)
+                        Text("Daño total: ${lastResult.damageDealt}", color = Color.White, style = MaterialTheme.typography.displaySmall)
                     }
                 }
             }
         } else {
-            Text("Acerca una figura para atacar...", color = Color.Gray, modifier = Modifier.padding(vertical = 12.dp))
+            Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+                Text("Acerca una figura NFC al móvil para atacar", color = Color.Gray)
+            }
         }
 
         Divider()
 
-        // --- SECCIÓN 3: LISTA EN TIEMPO REAL (NUEVO) ---
-        Text("Estado de la Mesa:", modifier = Modifier.align(Alignment.Start).padding(top = 8.dp))
+        // --- 3. LISTA DE FIGURAS EN MESA (Solo informativo local) ---
+        Text("Figuras en juego:", modifier = Modifier.align(Alignment.Start).padding(top = 8.dp))
+
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth().weight(1f)
@@ -88,7 +112,11 @@ fun ActionScreen(
 @Composable
 fun BattleRow(entity: BattleState) {
     val hpPercent = if (entity.maxHp > 0) entity.hp.toFloat() / entity.maxHp.toFloat() else 0f
-    val barColor = if (hpPercent > 0.5f) Color.Green else if (hpPercent > 0.2f) Color.Yellow else Color.Red
+    val barColor = when {
+        hpPercent > 0.5f -> Color.Green
+        hpPercent > 0.2f -> Color.Yellow
+        else -> Color.Red
+    }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Row(Modifier.padding(12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -96,12 +124,13 @@ fun BattleRow(entity: BattleState) {
                 Text(entity.name, fontWeight = FontWeight.Bold)
                 Text("AC: ${entity.ac}", style = MaterialTheme.typography.bodySmall)
             }
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(100.dp)) {
-                Text("${entity.hp}/${entity.maxHp} HP", fontWeight = FontWeight.Bold)
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(120.dp)) {
+                Text("${entity.hp} / ${entity.maxHp} HP", fontWeight = FontWeight.Bold)
                 LinearProgressIndicator(
                     progress = { hpPercent },
-                    modifier = Modifier.height(6.dp).fillMaxWidth(),
+                    modifier = Modifier.height(8.dp).fillMaxWidth().padding(top = 4.dp),
                     color = barColor,
+                    trackColor = Color.Gray
                 )
             }
         }

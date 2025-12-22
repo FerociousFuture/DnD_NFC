@@ -78,10 +78,10 @@ fun CharacterSheetScreen(
                             val battleState = BattleState(
                                 id = charData.id,
                                 name = charData.name,
-                                hp = charData.hpCurrent,
+                                hp = charData.hpCurrent, // <--- hp mapeado correctamente
                                 maxHp = charData.hpMax,
                                 ac = charData.ac,
-                                // initiative = charData.initiative // Descomenta si tu BattleState tiene iniciativa
+                                initiative = charData.initiative // <--- iniciativa incluida
                             )
                             onWriteCombatNfc(battleState)
                         }, enabled = isFormValid) {
