@@ -15,6 +15,8 @@ import java.nio.charset.Charset
 object NfcManager {
 
     private val gson = Gson()
+    // Definimos un tipo MIME propio para asegurar que leemos solo nuestras etiquetas
+    private const val MIME_TYPE = "application/dnd"
 
     // LEE Y DESCOMPRIME
     fun readCharacterFromIntent(intent: Intent): PlayerCharacter? {
@@ -24,24 +26,24 @@ object NfcManager {
 
             if (rawMsgs != null && rawMsgs.isNotEmpty()) {
                 val msg = rawMsgs[0] as NdefMessage
-                // Leemos el payload crudo
-                val compressedPayload = String(msg.records[0].payload, Charset.forName("UTF-8"))
+                val record = msg.records[0]
 
-                // Limpiamos cabeceras de idioma si existen (ej: "en" al principio)
-                // Buscamos el inicio del Base64 (suele ser alfanumérico o '+', '/')
-                val cleanPayload = compressedPayload.dropWhile { !it.isLetterOrDigit() && it != '+' && it != '/' }
+                // Corrección: Leemos el payload directamente sin intentar limpiarlo con lógica compleja
+                // Al usar createMime, no hay cabeceras de idioma ("en") que estorben.
+                val compressedPayload = String(record.payload, Charset.forName("UTF-8"))
 
                 // Descomprimimos
-                val json = DataCompressor.decompress(cleanPayload)
+                val json = DataCompressor.decompress(compressedPayload)
 
                 return if (json.isNotEmpty()) {
                     try {
                         gson.fromJson(json, PlayerCharacter::class.java)
                     } catch (e: Exception) {
+                        e.printStackTrace()
                         null
                     }
                 } else {
-                    null // No era un dato comprimido válido
+                    null // Dato corrupto o vacío
                 }
             }
         }
@@ -50,19 +52,25 @@ object NfcManager {
 
     // COMPRIME Y ESCRIBE
     fun writeCharacterToTag(tag: Tag, character: PlayerCharacter): Boolean {
-        // 1. Convertir objeto a JSON
-        val json = gson.toJson(character)
+        try {
+            // 1. Convertir objeto a JSON
+            val json = gson.toJson(character)
 
-        // 2. Comprimir JSON
-        val compressedData = DataCompressor.compress(json)
+            // 2. Comprimir JSON
+            val compressedData = DataCompressor.compress(json)
 
-        // Verificación de seguridad de tamaño (NTAG215 tiene ~504 bytes)
-        // Si se pasa, podríamos avisar al usuario, pero por ahora intentamos escribir.
+            // 3. Crear registro MIME (Más limpio que TextRecord)
+            // Esto guarda SOLO los datos, sin prefijos de idioma.
+            val payload = compressedData.toByteArray(Charset.forName("UTF-8"))
+            val ndefRecord = NdefRecord.createMime(MIME_TYPE, payload)
 
-        val ndefRecord = NdefRecord.createTextRecord("en", compressedData)
-        val ndefMessage = NdefMessage(arrayOf(ndefRecord))
+            val ndefMessage = NdefMessage(arrayOf(ndefRecord))
 
-        return writeNdefMessage(tag, ndefMessage)
+            return writeNdefMessage(tag, ndefMessage)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
     }
 
     private fun writeNdefMessage(tag: Tag, message: NdefMessage): Boolean {
@@ -70,9 +78,15 @@ object NfcManager {
             val ndef = Ndef.get(tag)
             if (ndef != null) {
                 ndef.connect()
-                if (!ndef.isWritable) return false
-                // Verificamos si cabe
-                if (ndef.maxSize < message.byteArrayLength) return false
+                if (!ndef.isWritable) {
+                    ndef.close()
+                    return false
+                }
+                // Verificamos espacio (NTAG215 ~504 bytes)
+                if (ndef.maxSize < message.byteArrayLength) {
+                    ndef.close()
+                    return false
+                }
 
                 ndef.writeNdefMessage(message)
                 ndef.close()
