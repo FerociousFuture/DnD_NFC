@@ -7,45 +7,73 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.Ndef
 import android.nfc.tech.NdefFormatable
-import com.example.dnd_nfc.data.model.CharacterSheet
+import com.example.dnd_nfc.data.local.DataCompressor
+import com.example.dnd_nfc.data.model.PlayerCharacter
+import com.google.gson.Gson
 import java.nio.charset.Charset
 
 object NfcManager {
 
-    fun readFromIntent(intent: Intent): CharacterSheet? {
-        val rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES) ?: return null
-        val msgs = rawMsgs.map { it as NdefMessage }
-        if (msgs.isEmpty()) return null
+    private val gson = Gson()
 
-        val record = msgs[0].records[0]
-        val payload = String(record.payload, Charset.forName("UTF-8"))
+    // LEE Y DESCOMPRIME
+    fun readCharacterFromIntent(intent: Intent): PlayerCharacter? {
+        val action = intent.action
+        if (NfcAdapter.ACTION_TAG_DISCOVERED == action || NfcAdapter.ACTION_NDEF_DISCOVERED == action) {
+            val rawMsgs = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
 
-        // NUEVO FORMATO: ID,Nombre,F,D,C,I,S,Car (Total 8 partes)
-        val parts = payload.split(",")
+            if (rawMsgs != null && rawMsgs.isNotEmpty()) {
+                val msg = rawMsgs[0] as NdefMessage
+                // Leemos el payload crudo
+                val compressedPayload = String(msg.records[0].payload, Charset.forName("UTF-8"))
 
-        // Verificamos que tenga al menos 8 partes (ID + Nombre + 6 Stats)
-        return if (parts.size >= 8) {
-            CharacterSheet(
-                id = parts[0],
-                n = parts[1],
-                // Construimos el string de stats uniendo las partes 2 a 7
-                s = "${parts[2]}-${parts[3]}-${parts[4]}-${parts[5]}-${parts[6]}-${parts[7]}"
-            )
-        } else {
-            null
+                // Limpiamos cabeceras de idioma si existen (ej: "en" al principio)
+                // Buscamos el inicio del Base64 (suele ser alfanumérico o '+', '/')
+                val cleanPayload = compressedPayload.dropWhile { !it.isLetterOrDigit() && it != '+' && it != '/' }
+
+                // Descomprimimos
+                val json = DataCompressor.decompress(cleanPayload)
+
+                return if (json.isNotEmpty()) {
+                    try {
+                        gson.fromJson(json, PlayerCharacter::class.java)
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else {
+                    null // No era un dato comprimido válido
+                }
+            }
         }
+        return null
     }
 
-    fun writeToTag(tag: Tag, csvData: String): Boolean {
-        // ... (El resto de la función de escritura se mantiene igual)
-        val record = NdefRecord.createMime("text/plain", csvData.toByteArray())
-        val message = NdefMessage(arrayOf(record))
+    // COMPRIME Y ESCRIBE
+    fun writeCharacterToTag(tag: Tag, character: PlayerCharacter): Boolean {
+        // 1. Convertir objeto a JSON
+        val json = gson.toJson(character)
 
+        // 2. Comprimir JSON
+        val compressedData = DataCompressor.compress(json)
+
+        // Verificación de seguridad de tamaño (NTAG215 tiene ~504 bytes)
+        // Si se pasa, podríamos avisar al usuario, pero por ahora intentamos escribir.
+
+        val ndefRecord = NdefRecord.createTextRecord("en", compressedData)
+        val ndefMessage = NdefMessage(arrayOf(ndefRecord))
+
+        return writeNdefMessage(tag, ndefMessage)
+    }
+
+    private fun writeNdefMessage(tag: Tag, message: NdefMessage): Boolean {
         try {
             val ndef = Ndef.get(tag)
             if (ndef != null) {
                 ndef.connect()
                 if (!ndef.isWritable) return false
+                // Verificamos si cabe
+                if (ndef.maxSize < message.byteArrayLength) return false
+
                 ndef.writeNdefMessage(message)
                 ndef.close()
                 return true

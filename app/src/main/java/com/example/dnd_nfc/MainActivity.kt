@@ -8,40 +8,41 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.dnd_nfc.data.local.CharacterManager
-import com.example.dnd_nfc.data.model.CharacterSheet
+import com.example.dnd_nfc.data.model.PlayerCharacter
 import com.example.dnd_nfc.data.model.ScanEvent
 import com.example.dnd_nfc.nfc.NfcManager
-import com.example.dnd_nfc.ui.screens.CharacterListScreen
-import com.example.dnd_nfc.ui.screens.CharacterSheetScreen
-import com.example.dnd_nfc.ui.screens.NfcReadScreen
+import com.example.dnd_nfc.ui.screens.*
 import com.example.dnd_nfc.ui.theme.DnD_NFCTheme
 
 class MainActivity : ComponentActivity() {
 
     private var nfcAdapter: NfcAdapter? = null
 
-    // Almacena datos temporalmente si queremos escribir en la próxima tarjeta
-    private var pendingWriteData: String? = null
+    // VARIABLE CLAVE: Almacena el personaje COMPLETO que queremos pasar al siguiente móvil
+    private var pendingCharacterToWrite: PlayerCharacter? = null
 
-    // Estado simple para comunicar el escaneo a la interfaz
+    // Estado para comunicar el escaneo a la UI (Pantalla de Lectura)
     private var lastScanEvent: ScanEvent? = null
 
-    // Callback para navegar cuando se escanea algo (se configura desde la UI)
+    // Callback de navegación (se configura desde cada pantalla)
     private var onNfcScanned: ((ScanEvent) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Inicializamos el adaptador NFC
+        // Inicializamos NFC
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
 
         setContent {
@@ -50,12 +51,25 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val context = LocalContext.current
 
-                    // NAVEGACIÓN SIMPLE (Sin Login)
-                    NavHost(navController = navController, startDestination = "character_list") {
+                    // NAVEGACIÓN PRINCIPAL
+                    NavHost(navController = navController, startDestination = "main_menu") {
 
-                        // 1. PANTALLA PRINCIPAL: LISTA DE PERSONAJES
+                        // 0. MENÚ PRINCIPAL
+                        composable("main_menu") {
+                            // Si escaneamos aquí, es modo LECTURA (recibir personaje)
+                            onNfcScanned = { event ->
+                                lastScanEvent = event
+                                navController.navigate("nfc_read")
+                            }
+
+                            MainMenuScreen(
+                                onNavigateToCharacters = { navController.navigate("character_list") },
+                                onNavigateToCampaigns = { navController.navigate("campaign_list") }
+                            )
+                        }
+
+                        // 1. LISTA DE PERSONAJES
                         composable("character_list") {
-                            // Configurar el callback: Si escaneamos aquí, vamos a leer
                             onNfcScanned = { event ->
                                 lastScanEvent = event
                                 navController.navigate("nfc_read")
@@ -63,53 +77,48 @@ class MainActivity : ComponentActivity() {
 
                             CharacterListScreen(
                                 onCharacterClick = { char ->
-                                    // Editar personaje existente
                                     navController.navigate("character_sheet/${char.id}")
                                 },
                                 onNewCharacterClick = {
-                                    // Crear nuevo
                                     navController.navigate("character_sheet/new")
                                 }
                             )
                         }
 
-                        // 2. PANTALLA DE FICHA (DETALLE/EDICIÓN)
+                        // 2. FICHA DE PERSONAJE
                         composable("character_sheet/{charId}") { backStackEntry ->
                             val charId = backStackEntry.arguments?.getString("charId")
 
-                            // Cargamos el personaje desde la memoria del teléfono
                             val character = if (charId != null && charId != "new") {
                                 CharacterManager.getCharacterById(context, charId)
                             } else {
                                 null
                             }
 
-                            // En la ficha, desactivamos la navegación por escaneo para evitar salidas accidentales
-                            onNfcScanned = { }
+                            // En la ficha no navegamos automáticamente al escanear para no perder cambios
+                            onNfcScanned = {}
 
                             CharacterSheetScreen(
                                 existingCharacter = character,
                                 onBack = { navController.popBackStack() },
                                 onWriteNfc = { charToLink ->
-                                    // MODO VINCULAR: Preparamos los datos para la próxima tarjeta que toque el móvil
-                                    // Formato CSV simple: ID,Nombre,Fuerza,Destreza...
-                                    val safeName = charToLink.name.replace(",", " ")
-                                    val csvData = "${charToLink.id},$safeName,${charToLink.str},${charToLink.dex},${charToLink.con},${charToLink.int},${charToLink.wis},${charToLink.cha}"
-
-                                    pendingWriteData = csvData
-                                    Toast.makeText(context, "¡Listo! Acerca una tarjeta para grabar.", Toast.LENGTH_LONG).show()
+                                    // MODO COMPARTIR: Preparamos el OBJETO ENTERO para escribir
+                                    pendingCharacterToWrite = charToLink
+                                    Toast.makeText(context, "¡Listo! Acerca el otro móvil/tarjeta para transferir.", Toast.LENGTH_LONG).show()
                                 }
                             )
                         }
 
-                        // 3. PANTALLA DE LECTURA NFC (Resultado del escaneo)
+                        // 3. PANTALLA DE LECTURA (Resultado)
                         composable("nfc_read") {
                             NfcReadScreen(
                                 scanEvent = lastScanEvent,
                                 onFullCharacterLoaded = { fullChar ->
-                                    // Si encontramos el personaje en el móvil, abrimos su ficha
+                                    // Guardar copia local si es nuevo (Importar)
+                                    CharacterManager.saveCharacter(context, fullChar)
+                                    // Ir a la ficha
                                     navController.navigate("character_sheet/${fullChar.id}") {
-                                        popUpTo("character_list") // Limpia la pila para que "atrás" vaya a la lista
+                                        popUpTo("character_list")
                                     }
                                 },
                                 onScanAgainClick = {
@@ -117,23 +126,28 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+
+                        // 4. LISTA DE CAMPAÑAS (Placeholder)
+                        composable("campaign_list") {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Gestor de Campañas (Próximamente)")
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    // --- MÉTODOS DEL SISTEMA PARA NFC ---
+    // --- CICLO DE VIDA NFC ---
 
     override fun onResume() {
         super.onResume()
-        // Dar prioridad a nuestra app para recibir tarjetas NFC mientras está abierta
         enableForegroundDispatch()
     }
 
     override fun onPause() {
         super.onPause()
-        // Dejar de escuchar si la app se minimiza
         nfcAdapter?.disableForegroundDispatch(this)
     }
 
@@ -143,7 +157,7 @@ class MainActivity : ComponentActivity() {
         nfcAdapter?.enableForegroundDispatch(this, pendingIntent, null, null)
     }
 
-    // ESTE MÉTODO SE EJECUTA AUTOMÁTICAMENTE AL TOCAR UNA TARJETA
+    // --- DETECCIÓN DE ETIQUETA ---
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
 
@@ -151,23 +165,35 @@ class MainActivity : ComponentActivity() {
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
 
             if (tag != null) {
-                if (pendingWriteData != null) {
-                    // --- CASO 1: MODO ESCRITURA (Vincular) ---
-                    // El usuario le dio al botón "Vincular" antes
-                    val success = NfcManager.writeToTag(tag, pendingWriteData!!)
+                if (pendingCharacterToWrite != null) {
+                    // --- MODO ESCRITURA (COMPARTIR) ---
+                    // Usamos la nueva función que comprime todo el personaje
+                    val success = NfcManager.writeCharacterToTag(tag, pendingCharacterToWrite!!)
                     if (success) {
-                        Toast.makeText(this, "¡Personaje vinculado con éxito!", Toast.LENGTH_LONG).show()
-                        pendingWriteData = null // Ya terminamos de escribir
+                        Toast.makeText(this, "¡Personaje transferido con éxito!", Toast.LENGTH_LONG).show()
+                        pendingCharacterToWrite = null
                     } else {
-                        Toast.makeText(this, "Error al escribir. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Error: Ficha demasiado grande o conexión fallida.", Toast.LENGTH_LONG).show()
                     }
                 } else {
-                    // --- CASO 2: MODO LECTURA (Escanear) ---
-                    // El usuario solo acercó una tarjeta para ver qué tiene
-                    val sheet = NfcManager.readFromIntent(intent)
-                    if (sheet != null) {
-                        // Notificamos a la navegación para que cambie de pantalla
-                        val event = ScanEvent(sheet)
+                    // --- MODO LECTURA (RECIBIR) ---
+                    // Intentamos leer un personaje completo comprimido
+                    val character = NfcManager.readCharacterFromIntent(intent)
+
+                    if (character != null) {
+                        // Importamos automáticamente al recibirlo
+                        CharacterManager.saveCharacter(this, character)
+                        Toast.makeText(this, "¡Personaje recibido: ${character.name}!", Toast.LENGTH_SHORT).show()
+
+                        // Navegamos para mostrarlo (usamos un CharacterSheet ligero para el evento, o adaptamos ScanEvent)
+                        // Para simplificar, creamos un ScanEvent asumiendo que lo actualizaste para soportar PlayerCharacter
+                        // O mapeamos a la versión ligera visual:
+                        val lightSheet = com.example.dnd_nfc.data.model.CharacterSheet(
+                            id = character.id,
+                            n = character.name,
+                            s = "Nivel ${character.level} ${character.charClass}"
+                        )
+                        val event = ScanEvent(lightSheet)
                         onNfcScanned?.invoke(event)
                     } else {
                         Toast.makeText(this, "Tarjeta vacía o formato desconocido.", Toast.LENGTH_SHORT).show()
