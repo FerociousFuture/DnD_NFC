@@ -6,16 +6,16 @@ data class BattleState(
     val hp: Int,
     val maxHp: Int,
     val ac: Int,
-    val status: String = "Normal", // Estado (Envenenado, etc)
+    val status: String = "Normal",
 
     // Iniciativa
-    var initiativeBonus: Int = 0, // Se edita manualmente antes de empezar
-    var initiativeTotal: Int = 0, // Resultado del dado + bono
+    var initiativeBonus: Int = 0,
+    var initiativeTotal: Int = 0,
 
-    // Control de UI
-    var isSelected: Boolean = false, // Para seleccionar a quién pegar/curar
+    // Control UI
+    var isSelected: Boolean = false,
 
-    // --- ESTADÍSTICAS (FALTABAN ESTOS CAMPOS) ---
+    // --- ESTADÍSTICAS GUARDADAS (Para no escanear cada vez) ---
     val str: Int = 10,
     val dex: Int = 10,
     val con: Int = 10,
